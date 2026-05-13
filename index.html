@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SSC Industrial Inventory</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+body { background:#0f172a; color:#e2e8f0; font-family:Inter, sans-serif; }
+.low { background:rgba(220,38,38,.15); }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel">
+
+/* ---------------- FIREBASE CONFIG ---------------- */
+/* 🔴 PASTE YOUR FIREBASE CONFIG BELOW */
+const firebaseConfig = {
+  apiKey: "AIzaSyBjlUTjD5Km0b0KN2ncgFaH4nSiFpwFEpQ",
+  authDomain: "sss-inventory-83bbc.firebaseapp.com",
+  projectId: "sss-inventory-83bbc",
+  storageBucket: "sss-inventory-83bbc.firebasestorage.app",
+  messagingSenderId: "760114309431",
+  appId: "1:760114309431:web:9f30978021d6d8f5cfd2b2",
+  measurementId: "G-VNDGDK1WSW"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+/* ---------------- INITIAL DATA (IF EMPTY DB) ---------------- */
+
+const INITIAL_PARTS = [
+  {id:"1", name:"HMI 12\"", min:1, stock:0, mode:"production"},
+  {id:"2", name:"Controller PFC200", min:1, stock:0, mode:"production"},
+  {id:"3", name:"Terminal Block", min:9, stock:223, mode:"production"},
+  {id:"4", name:"Fuse 5A", min:3, stock:41, mode:"spare"}
+];
+
+function App(){
+
+  const [parts,setParts] = React.useState([]);
+  const [mode,setMode] = React.useState("production");
+
+  /* ----------- REALTIME SYNC ----------- */
+  React.useEffect(()=>{
+    const unsubscribe = db.collection("parts")
+      .onSnapshot(snapshot=>{
+        if(snapshot.empty){
+          INITIAL_PARTS.forEach(p=>db.collection("parts").doc(p.id).set(p));
+        } else {
+          setParts(snapshot.docs.map(doc=>doc.data()));
+        }
+      });
+    return ()=>unsubscribe();
+  },[]);
+
+  /* ----------- BUILD CAPACITY ----------- */
+  const productionParts = parts.filter(p=>p.mode==="production");
+
+  const buildCapacity = productionParts.length
+    ? Math.min(...productionParts.map(p=>Math.floor(p.stock/p.min)))
+    : 0;
+
+  /* ----------- BUILD 1 SSC ----------- */
+  const buildOneSSC = ()=>{
+    if(buildCapacity<=0){
+      alert("Cannot build SSC. Insufficient parts.");
+      return;
+    }
+
+    productionParts.forEach(p=>{
+      db.collection("parts").doc(p.id)
+        .update({stock: p.stock - p.min});
+    });
+  };
+
+  /* ----------- UPDATE STOCK ----------- */
+  const updateStock = (id,value)=>{
+    db.collection("parts").doc(id).update({stock:value});
+  };
+
+  /* ----------- ADD NEW PART ----------- */
+  const addPart = ()=>{
+    const name = prompt("Part Name?");
+    const min = parseInt(prompt("Qty Required per SSC?"));
+    if(!name || !min) return;
+
+    const id = Date.now().toString();
+    db.collection("parts").doc(id).set({
+      id,name,min,stock:0,mode:"production"
+    });
+  };
+
+  return(
+  <div className="max-w-6xl mx-auto p-6">
+
+    <h1 className="text-2xl font-bold mb-6">
+      SSC INDUSTRIAL INVENTORY SYSTEM
+    </h1>
+
+    {/* MODE SWITCH */}
+    <div className="flex gap-4 mb-6">
+      <button 
+        onClick={()=>setMode("production")}
+        className={`px-4 py-2 rounded ${mode==="production"?"bg-blue-600":"bg-slate-700"}`}>
+        Production Mode
+      </button>
+      <button 
+        onClick={()=>setMode("spare")}
+        className={`px-4 py-2 rounded ${mode==="spare"?"bg-blue-600":"bg-slate-700"}`}>
+        Spare Mode
+      </button>
+    </div>
+
+    {/* STATS */}
+    {mode==="production" &&
+      <div className="bg-slate-800 p-4 rounded mb-6">
+        <div className="text-lg">
+          Build Capacity: 
+          <span className="text-green-400 font-bold ml-2">
+            {buildCapacity} SSC Units
+          </span>
+        </div>
+        <button
+          onClick={buildOneSSC}
+          className="mt-3 bg-green-600 px-4 py-2 rounded">
+          BUILD 1 SSC
+        </button>
+      </div>
+    }
+
+    {/* TABLE */}
+    <div className="bg-slate-900 rounded overflow-hidden">
+      <table className="w-full text-left">
+        <thead className="bg-slate-800 text-xs uppercase">
+          <tr>
+            <th className="p-3">Part</th>
+            <th className="p-3">Req / SSC</th>
+            <th className="p-3">Stock</th>
+            <th className="p-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        {parts.filter(p=>p.mode===mode).map(p=>(
+          <tr key={p.id}
+            className={p.stock<p.min && p.mode==="production"?"low":""}>
+            <td className="p-3">{p.name}</td>
+            <td className="p-3">{p.min}</td>
+            <td className="p-3">{p.stock}</td>
+            <td className="p-3">
+              <button onClick={()=>updateStock(p.id,p.stock+1)}
+                className="px-2 bg-slate-700 rounded mr-1">+</button>
+              <button onClick={()=>updateStock(p.id,Math.max(0,p.stock-1))}
+                className="px-2 bg-slate-700 rounded mr-1">-</button>
+              <button onClick={()=>updateStock(p.id,0)}
+                className="px-2 bg-red-600 rounded">Reset</button>
+            </td>
+          </tr>
+        ))}
+        </tbody>
+      </table>
+    </div>
+
+    <button onClick={addPart}
+      className="mt-6 bg-blue-600 px-4 py-2 rounded">
+      Add New Part
+    </button>
+
+  </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+
+</script>
+</body>
+</html>
