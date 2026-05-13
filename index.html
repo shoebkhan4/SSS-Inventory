@@ -42,11 +42,60 @@ const db = firebase.firestore();
 /* ---------------- INITIAL DATA (IF EMPTY DB) ---------------- */
 
 const INITIAL_PARTS = [
-  {id:"1", name:"HMI 12\"", min:1, stock:0, mode:"production"},
-  {id:"2", name:"Controller PFC200", min:1, stock:0, mode:"production"},
-  {id:"3", name:"Terminal Block", min:9, stock:223, mode:"production"},
-  {id:"4", name:"Fuse 5A", min:3, stock:41, mode:"spare"}
+{id:"1",name:'HMI 12" (SSC)',min:1,stock:0,mode:"production"},
+{id:"2",name:'HMI 7" (SSP)',min:1,stock:3,mode:"production"},
+{id:"3",name:'SOV1, SOV2 - Solenoid Valve',min:2,stock:0,mode:"production"},
+{id:"4",name:'Controller PFC200',min:1,stock:0,mode:"production"},
+{id:"5",name:'8-channel digital input',min:1,stock:0,mode:"production"},
+{id:"6",name:'8-channel digital output',min:3,stock:0,mode:"production"},
+{id:"7",name:'4-channel analog input (Resistance)',min:3,stock:0,mode:"production"},
+{id:"8",name:'4-channel analog input 4-20mA',min:1,stock:0,mode:"production"},
+{id:"9",name:'4-channel analog output 4-20mA',min:2,stock:0,mode:"production"},
+{id:"10",name:'RS-232/485 Interface',min:2,stock:0,mode:"production"},
+{id:"11",name:'End Module',min:1,stock:0,mode:"production"},
+{id:"12",name:'Power Supply Unit',min:1,stock:0,mode:"production"},
+{id:"13",name:'Relay 1',min:2,stock:0,mode:"production"},
+{id:"14",name:'Relay 2',min:3,stock:0,mode:"production"},
+{id:"15",name:'SSR',min:6,stock:0,mode:"production"},
+{id:"16",name:'Plastic Cover for SSR',min:6,stock:0,mode:"production"},
+{id:"17",name:'Z Purge indicator',min:1,stock:0,mode:"production"},
+{id:"18",name:'PSO-SMLC-S',min:1,stock:0,mode:"production"},
+{id:"19",name:'Differential Pressure Transmitter',min:1,stock:0,mode:"production"},
+{id:"20",name:'Velocimeter SOV Manifold',min:5,stock:0,mode:"production"},
+{id:"21",name:'SS316 Enclosure Back Mount Plate',min:1,stock:0,mode:"production"},
+{id:"22",name:'External Enclosure Mount Heat sink',min:1,stock:0,mode:"production"},
+{id:"23",name:'4mm2 Fuse Terminal Blocks',min:9,stock:223,mode:"production"},
+{id:"24",name:'End Plate Terminal',min:3,stock:91,mode:"production"},
+{id:"25",name:'Comb Shorting Link 2 pole',min:2,stock:0,mode:"production"},
+{id:"26",name:'Comb Shorting Link 3 pole',min:2,stock:0,mode:"production"},
+{id:"27",name:'Comb Shorting Link 4 pole',min:2,stock:0,mode:"production"},
+{id:"28",name:'Comb Shorting Link 10 pole',min:2,stock:0,mode:"production"},
+{id:"29",name:'Ground Terminal',min:8,stock:0,mode:"production"},
+{id:"30",name:'Double Level Terminal Black',min:20,stock:0,mode:"production"},
+{id:"31",name:'Double Level Terminal Grey',min:40,stock:0,mode:"production"},
+{id:"32",name:'Terminal Block Jumper 2 pole',min:3,stock:0,mode:"production"},
+{id:"33",name:'Terminal Block Jumper 3 pole',min:2,stock:0,mode:"production"},
+{id:"34",name:'Terminal Block Jumper 4 pole',min:1,stock:0,mode:"production"},
+{id:"35",name:'Terminal Block Jumper 10 pole',min:2,stock:0,mode:"production"},
+{id:"36",name:'Triple Level Terminal Block',min:12,stock:0,mode:"production"},
+{id:"37",name:'Triple Level Terminal End Cover',min:3,stock:0,mode:"production"},
+{id:"38",name:'Single Level Terminal Block',min:7,stock:0,mode:"production"},
+{id:"39",name:'Terminal Block Jumper 2 pole 125A',min:2,stock:0,mode:"production"},
+{id:"40",name:'Terminal Block Separator',min:2,stock:0,mode:"production"},
+{id:"41",name:'Grounding Terminal Block',min:12,stock:0,mode:"production"},
+{id:"42",name:'Terminal Block End Cover Orange',min:10,stock:0,mode:"production"},
+{id:"43",name:'Terminal Block End Cover Green',min:10,stock:0,mode:"production"},
+{id:"44",name:'DIN Rail End Bracket 9mm',min:21,stock:0,mode:"production"},
+{id:"45",name:'DIN Rail End Bracket 6mm',min:21,stock:0,mode:"spare"},
+{id:"46",name:'Fuse 5A',min:3,stock:41,mode:"production"},
+{id:"47",name:'Fuse 1A',min:1,stock:47,mode:"production"},
+{id:"48",name:'Fuse 10A',min:4,stock:38,mode:"production"},
+{id:"49",name:'Fuse 8A',min:1,stock:47,mode:"production"},
+{id:"50",name:'Miniature Circuit Breaker',min:1,stock:2,mode:"production"},
+{id:"51",name:'Marking Tag Single Char',min:1,stock:0,mode:"production"},
+{id:"52",name:'Marking Tag Numbered 1-10',min:15,stock:0,mode:"production"},
 ];
+
 
 function App(){
 
@@ -177,6 +226,16 @@ function App(){
       className="mt-6 bg-blue-600 px-4 py-2 rounded">
       Add New Part
     </button>
+    <button
+onClick={()=>{
+  INITIAL_PARTS.forEach(p=>{
+    db.collection("parts").doc(p.id).set(p);
+  });
+  alert("BOM Uploaded Successfully");
+}}
+className="mt-4 bg-purple-600 px-4 py-2 rounded">
+Bulk Upload Full BOM
+</button>
 
   </div>
   );
