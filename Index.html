@@ -1,163 +1,188 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SSC | Industrial Parts Manager</title>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f1f5f9; }
-        .mono { font-family: 'JetBrains Mono', monospace; }
-        .industrial-shadow { shadow-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-        .alert-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SSC Industrial Inventory</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+body { background:#0f172a; color:#e2e8f0; font-family:Inter, sans-serif; }
+.low { background:rgba(220,38,38,.15); }
+</style>
 </head>
 <body>
-    <div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+<div id="root"></div>
 
-        // Data from your image
-        const INITIAL_PARTS = [
-            { id: 1, sn: "1", desc: 'HMI 12" (SSC)', brand: "Beijer", partNo: "X2 Extreme 12", min: 1, stock: 0, price: 3000.00, lead: "4 Weeks" },
-            { id: 2, sn: "2", desc: 'HMI 7" (SSP)', brand: "Beijer", partNo: "X2 Extreme 7", min: 1, stock: 3, price: 1200.00, lead: "2 Weeks" },
-            { id: 4, sn: "4", desc: "Controller PFC200; 2nd Gen", brand: "WAGO", partNo: "750-8212", min: 1, stock: 0, price: 871.93, lead: "6 Weeks" },
-            { id: 12, sn: "12", desc: "Power Supply Unit", brand: "TRACO POWER", partNo: "TIB120-124EX", min: 1, stock: 1, price: 160.00, lead: "1 Week" },
-            { id: 23, sn: "23", desc: "4mm2 Fuse Terminal Blocks", brand: "ConnectWell", partNo: "CAFL4U", min: 9, stock: 223, price: 517.33, lead: "Stock" },
-            { id: 46, sn: "46", desc: "FUSE (5A)", brand: "Automation Direct", partNo: "ABC5", min: 3, stock: 41, price: 135.30, lead: "Stock" }
-        ];
+<script type="text/babel">
 
-        function App() {
-            const [parts, setParts] = useState(() => {
-                const saved = localStorage.getItem('ssc_data');
-                return saved ? JSON.parse(saved) : INITIAL_PARTS;
-            });
-            const [search, setSearch] = useState('');
-            const [editing, setEditing] = useState(null);
+/* ---------------- FIREBASE CONFIG ---------------- */
+/* 🔴 PASTE YOUR FIREBASE CONFIG BELOW */
+const firebaseConfig = {
+  apiKey: "PASTE_HERE",
+  authDomain: "PASTE_HERE",
+  projectId: "PASTE_HERE",
+  storageBucket: "PASTE_HERE",
+  messagingSenderId: "PASTE_HERE",
+  appId: "PASTE_HERE"
+};
 
-            useEffect(() => {
-                localStorage.setItem('ssc_data', JSON.stringify(parts));
-            }, [parts]);
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
-            const lowStockItems = parts.filter(p => p.stock < p.min);
-            
-            // Calculate how many full SSC units can be built
-            const buildCapacity = useMemo(() => {
-                const capacities = parts.map(p => Math.floor(p.stock / p.min));
-                return Math.min(...capacities);
-            }, [parts]);
+/* ---------------- INITIAL DATA (IF EMPTY DB) ---------------- */
 
-            const updateStock = (id, delta) => {
-                setParts(parts.map(p => p.id === id ? { ...p, stock: Math.max(0, p.stock + delta) } : p));
-            };
+const INITIAL_PARTS = [
+  {id:"1", name:"HMI 12\"", min:1, stock:0, mode:"production"},
+  {id:"2", name:"Controller PFC200", min:1, stock:0, mode:"production"},
+  {id:"3", name:"Terminal Block", min:9, stock:223, mode:"production"},
+  {id:"4", name:"Fuse 5A", min:3, stock:41, mode:"spare"}
+];
 
-            return (
-                <div className="max-w-7xl mx-auto p-4 md:p-8">
-                    {/* Header */}
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-slate-800 pb-6">
-                        <div>
-                            <h1 className="text-2xl font-bold tracking-tighter flex items-center gap-2">
-                                <span className="bg-blue-600 p-1 rounded text-white italic">SSC</span> 
-                                SMART SAMPLING CONTROLLER
-                            </h1>
-                            <p className="text-slate-400 text-sm mt-1 uppercase tracking-widest">Inventory Management System</p>
-                        </div>
-                        <div className="flex gap-3">
-                            <button className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded border border-slate-700 text-xs font-bold uppercase transition-all">Export CSV</button>
-                            <button className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded text-xs font-bold uppercase transition-all shadow-lg shadow-blue-900/20">Add New Part</button>
-                        </div>
-                    </div>
+function App(){
 
-                    {/* Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                        <StatCard label="Build Capacity" value={buildCapacity} sub="Full Units Ready" color="text-blue-400" />
-                        <StatCard label="Critical Alerts" value={lowStockItems.length} sub="Below Min Qty" color={lowStockItems.length > 0 ? "text-red-500" : "text-emerald-500"} />
-                        <StatCard label="Total Line Items" value={parts.length} sub="Parts in Catalog" color="text-slate-300" />
-                        <StatCard label="Inventory Value" value={`$${parts.reduce((a, b) => a + (b.stock * b.price), 0).toLocaleString()}`} sub="Current Asset Value" color="text-emerald-400" />
-                    </div>
+  const [parts,setParts] = React.useState([]);
+  const [mode,setMode] = React.useState("production");
 
-                    {/* Search and Table */}
-                    <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden industrial-shadow">
-                        <div className="p-4 border-b border-slate-800 bg-slate-900/80">
-                            <input 
-                                type="text" 
-                                placeholder="SEARCH BY PART NO, DESCRIPTION, OR BRAND..."
-                                className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-sm mono focus:outline-none focus:border-blue-500"
-                                onChange={(e) => setSearch(e.target.value.toLowerCase())}
-                            />
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead className="bg-slate-950 text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold">
-                                    <tr>
-                                        <th className="px-6 py-4">SN</th>
-                                        <th className="px-6 py-4">Part Specification</th>
-                                        <th className="px-6 py-4 text-center">Req/Unit</th>
-                                        <th className="px-6 py-4 text-center">In Stock</th>
-                                        <th className="px-6 py-4">Lead Time</th>
-                                        <th className="px-6 py-4 text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800 text-sm">
-                                    {parts.filter(p => p.desc.toLowerCase().includes(search) || p.partNo.toLowerCase().includes(search)).map(part => (
-                                        <tr key={part.id} className={`${part.stock < part.min ? 'bg-red-500/10' : 'hover:bg-slate-800/30'} transition-colors`}>
-                                            <td className="px-6 py-4 mono text-slate-500">{part.sn}</td>
-                                            <td className="px-6 py-4">
-                                                <div className="font-bold text-slate-200">{part.desc}</div>
-                                                <div className="text-xs flex gap-2 mt-1">
-                                                    <span className="text-blue-400 mono">{part.partNo}</span>
-                                                    <span className="text-slate-500">|</span>
-                                                    <span className="text-slate-500 uppercase">{part.brand}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center mono">{part.min}</td>
-                                            <td className="px-6 py-4 text-center">
-                                                <div className="flex flex-col items-center">
-                                                    <span className={`px-3 py-1 rounded font-bold mono text-xs ${part.stock < part.min ? 'bg-red-600 text-white alert-pulse' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
-                                                        {part.stock}
-                                                    </span>
-                                                    {part.stock < part.min && <span className="text-[10px] text-red-500 mt-1 uppercase font-bold">Low Stock</span>}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-xs text-slate-400 uppercase tracking-tighter">{part.lead}</td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex justify-end gap-1">
-                                                    <button onClick={() => updateStock(part.id, 1)} className="p-2 hover:bg-slate-700 rounded">+</button>
-                                                    <button onClick={() => updateStock(part.id, -1)} className="p-2 hover:bg-slate-700 rounded">-</button>
-                                                    <button className="p-2 text-blue-400 hover:bg-blue-400/10 rounded">Edit</button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            );
+  /* ----------- REALTIME SYNC ----------- */
+  React.useEffect(()=>{
+    const unsubscribe = db.collection("parts")
+      .onSnapshot(snapshot=>{
+        if(snapshot.empty){
+          INITIAL_PARTS.forEach(p=>db.collection("parts").doc(p.id).set(p));
+        } else {
+          setParts(snapshot.docs.map(doc=>doc.data()));
         }
+      });
+    return ()=>unsubscribe();
+  },[]);
 
-        function StatCard({ label, value, sub, color }) {
-            return (
-                <div className="bg-slate-900 border border-slate-800 p-5 rounded-lg">
-                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">{label}</div>
-                    <div className={`text-3xl font-bold mono mb-1 ${color}`}>{value}</div>
-                    <div className="text-xs text-slate-500">{sub}</div>
-                </div>
-            );
-        }
+  /* ----------- BUILD CAPACITY ----------- */
+  const productionParts = parts.filter(p=>p.mode==="production");
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+  const buildCapacity = productionParts.length
+    ? Math.min(...productionParts.map(p=>Math.floor(p.stock/p.min)))
+    : 0;
 
-    <!-- Load Babel for browser-side JSX compilation -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  /* ----------- BUILD 1 SSC ----------- */
+  const buildOneSSC = ()=>{
+    if(buildCapacity<=0){
+      alert("Cannot build SSC. Insufficient parts.");
+      return;
+    }
+
+    productionParts.forEach(p=>{
+      db.collection("parts").doc(p.id)
+        .update({stock: p.stock - p.min});
+    });
+  };
+
+  /* ----------- UPDATE STOCK ----------- */
+  const updateStock = (id,value)=>{
+    db.collection("parts").doc(id).update({stock:value});
+  };
+
+  /* ----------- ADD NEW PART ----------- */
+  const addPart = ()=>{
+    const name = prompt("Part Name?");
+    const min = parseInt(prompt("Qty Required per SSC?"));
+    if(!name || !min) return;
+
+    const id = Date.now().toString();
+    db.collection("parts").doc(id).set({
+      id,name,min,stock:0,mode:"production"
+    });
+  };
+
+  return(
+  <div className="max-w-6xl mx-auto p-6">
+
+    <h1 className="text-2xl font-bold mb-6">
+      SSC INDUSTRIAL INVENTORY SYSTEM
+    </h1>
+
+    {/* MODE SWITCH */}
+    <div className="flex gap-4 mb-6">
+      <button 
+        onClick={()=>setMode("production")}
+        className={`px-4 py-2 rounded ${mode==="production"?"bg-blue-600":"bg-slate-700"}`}>
+        Production Mode
+      </button>
+      <button 
+        onClick={()=>setMode("spare")}
+        className={`px-4 py-2 rounded ${mode==="spare"?"bg-blue-600":"bg-slate-700"}`}>
+        Spare Mode
+      </button>
+    </div>
+
+    {/* STATS */}
+    {mode==="production" &&
+      <div className="bg-slate-800 p-4 rounded mb-6">
+        <div className="text-lg">
+          Build Capacity: 
+          <span className="text-green-400 font-bold ml-2">
+            {buildCapacity} SSC Units
+          </span>
+        </div>
+        <button
+          onClick={buildOneSSC}
+          className="mt-3 bg-green-600 px-4 py-2 rounded">
+          BUILD 1 SSC
+        </button>
+      </div>
+    }
+
+    {/* TABLE */}
+    <div className="bg-slate-900 rounded overflow-hidden">
+      <table className="w-full text-left">
+        <thead className="bg-slate-800 text-xs uppercase">
+          <tr>
+            <th className="p-3">Part</th>
+            <th className="p-3">Req / SSC</th>
+            <th className="p-3">Stock</th>
+            <th className="p-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        {parts.filter(p=>p.mode===mode).map(p=>(
+          <tr key={p.id}
+            className={p.stock<p.min && p.mode==="production"?"low":""}>
+            <td className="p-3">{p.name}</td>
+            <td className="p-3">{p.min}</td>
+            <td className="p-3">{p.stock}</td>
+            <td className="p-3">
+              <button onClick={()=>updateStock(p.id,p.stock+1)}
+                className="px-2 bg-slate-700 rounded mr-1">+</button>
+              <button onClick={()=>updateStock(p.id,Math.max(0,p.stock-1))}
+                className="px-2 bg-slate-700 rounded mr-1">-</button>
+              <button onClick={()=>updateStock(p.id,0)}
+                className="px-2 bg-red-600 rounded">Reset</button>
+            </td>
+          </tr>
+        ))}
+        </tbody>
+      </table>
+    </div>
+
+    <button onClick={addPart}
+      className="mt-6 bg-blue-600 px-4 py-2 rounded">
+      Add New Part
+    </button>
+
+  </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+
+</script>
 </body>
 </html>
