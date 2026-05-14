@@ -162,6 +162,8 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
 .btn-row-edit:hover { background: rgba(96,165,250,.15); }
 .btn-row-delete { background: transparent; color: #f87171; }
 .btn-row-delete:hover { background: rgba(248,113,113,.15); }
+.btn-row-move { border: 1px solid rgba(52,211,153,.25); border-radius: 6px; padding: 3px 7px; font-size: 11px; font-weight: 600; cursor: pointer; transition: background .12s; background: rgba(52,211,153,.08); color: #34d399; }
+.btn-row-move:hover { background: rgba(52,211,153,.2); }
 td.actions { white-space: nowrap; }
 /* Audit log items */
 .audit-item { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
@@ -283,6 +285,8 @@ td.actions { white-space: nowrap; }
   <label>Initial Stock</label><input id="newStock" type="number" min="0" value="0" />
   <label>Unit Price ($)</label><input id="newPrice" type="number" min="0" step="0.01" value="0" />
   <label>Mode</label><select id="newMode"><option value="production">Production</option><option value="spare">Spare</option></select>
+  <label>PO Number <span style="color:#64748b;font-size:10px;">(required if initial stock &gt; 0)</span></label><input id="newPO" type="text" placeholder="e.g. PO-2024-001" />
+  <label>Job Number <span style="color:#64748b;font-size:10px;">(required if initial stock &gt; 0)</span></label><input id="newJob" type="text" placeholder="e.g. JOB-123" />
   <div class="actions"><button class="btn btn-ghost" id="addCancel">Cancel</button><button class="btn btn-primary" id="addSave">Add Part</button></div>
 </div></div>
 
@@ -309,7 +313,9 @@ td.actions { white-space: nowrap; }
     <label>Part</label>
     <select id="poPartSelect" style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px 10px;border-radius:6px;font-size:14px;"></select>
     <label>Qty to Order</label><input id="poQty" type="number" min="1" value="1" />
-    <label>Vendor / Notes</label><input id="poNotes" type="text" placeholder="e.g. Order from Phoenix Contact - PO#1234" />
+    <label>Vendor / Notes</label><input id="poNotes" type="text" placeholder="e.g. Order from Phoenix Contact" />
+    <label>PO Reference #</label><input id="poPONumber" type="text" placeholder="e.g. PO-2024-001" />
+    <label>Job Number</label><input id="poJobNumber" type="text" placeholder="e.g. JOB-123" />
     <div class="actions">
       <button class="btn btn-ghost" id="poCancelCreate">Cancel</button>
       <button class="btn btn-primary" id="poSaveBtn">Create Order</button>
@@ -376,6 +382,8 @@ td.actions { white-space: nowrap; }
     <option value="Other">Other</option>
   </select>
   <label>Notes (optional)</label><input id="reasonNotes" type="text" placeholder="Additional details..." />
+  <label>PO Number</label><input id="reasonPO" type="text" placeholder="e.g. PO-2024-001" />
+  <label>Job Number</label><input id="reasonJob" type="text" placeholder="e.g. JOB-123" />
   <div class="actions">
     <button class="btn btn-ghost" id="reasonCancel">Cancel</button>
     <button class="btn btn-primary" id="reasonConfirm">Confirm</button>
@@ -392,6 +400,32 @@ td.actions { white-space: nowrap; }
     <div class="empty"><div class="big">&#x1F4CB;</div><div>No audit entries yet.</div></div>
   </div>
   <div class="actions"><button class="btn btn-ghost" id="auditClose">Close</button></div>
+</div></div>
+
+<!-- ===== BUILD SSC MODAL ===== -->
+<div class="modal-bg" id="buildModalBg" style="z-index:130;"><div class="modal" style="max-width:440px;">
+  <h2>&#x1F527; Build 1 SSC Unit</h2>
+  <div id="buildInfo" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;color:#cbd5e1;"></div>
+  <label>PO Number</label><input id="buildPO" type="text" placeholder="e.g. PO-2024-001" />
+  <label>Job Number</label><input id="buildJob" type="text" placeholder="e.g. JOB-123" />
+  <div class="actions">
+    <button class="btn btn-ghost" id="buildCancel">Cancel</button>
+    <button class="btn btn-success" id="buildConfirm">&#x2705; Build 1 SSC</button>
+  </div>
+</div></div>
+
+<!-- ===== SPARE TO PRODUCTION MODAL ===== -->
+<div class="modal-bg" id="spareToProModalBg" style="z-index:130;"><div class="modal" style="max-width:420px;">
+  <h2>&#x2197; Move to Production</h2>
+  <div id="spareToProInfo" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;color:#cbd5e1;"></div>
+  <input type="hidden" id="spareToProPartId" />
+  <label>PO Number</label><input id="spareToPoPO" type="text" placeholder="e.g. PO-2024-001" />
+  <label>Job Number</label><input id="spareToProJob" type="text" placeholder="e.g. JOB-123" />
+  <label>Notes (optional)</label><input id="spareToProNotes" type="text" placeholder="Reason for moving to production..." />
+  <div class="actions">
+    <button class="btn btn-ghost" id="spareToProCancel">Cancel</button>
+    <button class="btn btn-primary" id="spareToProConfirm">Move to Production</button>
+  </div>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -631,11 +665,11 @@ function render(){
     var tr=document.createElement("tr");
     tr.className="row-"+s;
     tr.dataset.partid=p.id;
-    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td><td class="actions"><button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button> <button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/td>';
+    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td><td class="actions">'+(p.mode==="spare"?'<button class="btn-row-move" data-id="'+p.id+'" title="Move to Production" aria-label="Move to Production">&#x2197; Prod<\/button> ':'' )+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button> <button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/td>';
     tbody.appendChild(tr);
 
     var card=document.createElement("div");card.className="mobile-card";card.dataset.partid=p.id;
-    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div style="display:flex;gap:6px;align-items:center;"><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div><button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button><button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/div><\/div>';
+    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div>'+(p.mode==="spare"?'<button class="btn-row-move" data-id="'+p.id+'" title="Move to Production" aria-label="Move to Production">&#x2197;<\/button>':'')+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button><button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/div><\/div>';
     mlist.appendChild(card);
   });
 
@@ -650,19 +684,35 @@ function buildOneSSC(){
   var prod=parts.filter(function(p){return p.mode==="production";});
   var cap=prod.length?Math.min.apply(null,prod.map(function(p){return Math.floor(p.stock/Math.max(1,p.min));})):0;
   if(cap<=0){showToast("Insufficient parts to build","error");return;}
-  if(!confirm("Build 1 SSC unit?\n\nThis will deduct the per-SSC quantity from "+prod.length+" parts."))return;
+  $("buildInfo").innerHTML='<strong>'+prod.length+' production parts</strong> will be decremented.<br/>Current build capacity: <strong>'+cap+' SSC</strong>.';
+  $("buildPO").value="";
+  $("buildJob").value="";
+  $("buildModalBg").classList.add("show");
+  $("buildPO").focus();
+}
+
+function executeBuild(){
+  var poNumber=$("buildPO").value.trim();
+  var jobNumber=$("buildJob").value.trim();
+  if(!poNumber){showToast("PO Number is required","error");$("buildPO").focus();return;}
+  if(!jobNumber){showToast("Job Number is required","error");$("buildJob").focus();return;}
+  $("buildModalBg").classList.remove("show");
+  var prod=parts.filter(function(p){return p.mode==="production";});
+  var cap=prod.length?Math.min.apply(null,prod.map(function(p){return Math.floor(p.stock/Math.max(1,p.min));})):0;
+  if(cap<=0){showToast("Insufficient parts to build","error");return;}
   var batch=db.batch();
   prod.forEach(function(p){batch.update(db.collection("parts").doc(p.id),{stock:Math.max(0,p.stock-p.min)});});
   prod.forEach(function(p){
     var auditRef=db.collection("auditLog").doc();
-    batch.set(auditRef,{id:auditRef.id,partId:p.id,partName:p.name,partNumber:p.partNumber,oldStock:p.stock,newStock:Math.max(0,p.stock-p.min),delta:-p.min,reason:"Used in build",notes:"SSC build",changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+    batch.set(auditRef,{id:auditRef.id,partId:p.id,partName:p.name,partNumber:p.partNumber,oldStock:p.stock,newStock:Math.max(0,p.stock-p.min),delta:-p.min,reason:"Used in build",notes:"SSC build",poNumber:poNumber,jobNumber:jobNumber,changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()});
   });
-  /* Log to build history */
   var histRef=db.collection("buildHistory").doc();
   batch.set(histRef,{
     id:histRef.id,
     timestamp:firebase.firestore.FieldValue.serverTimestamp(),
     builtBy:currentUser?currentUser.email:"unknown",
+    poNumber:poNumber,
+    jobNumber:jobNumber,
     partsUsed:prod.map(function(p){return{id:p.id,name:p.name,partNumber:p.partNumber,qty:p.min};}),
     partCount:prod.length
   });
@@ -701,7 +751,7 @@ function loadBuildHistory(){
           partsHtml=d.partsUsed.slice(0,5).map(function(p){return escapeHTML(p.name)+" (\u00d7"+p.qty+")"}).join("<br/>");
           if(d.partsUsed.length>5)partsHtml+="<br/>\u2026and "+(d.partsUsed.length-5)+" more parts";
         }
-        html+='<div class="history-item"><div class="hist-header"><span style="font-weight:700;color:#fdba74;">1 SSC Built<\/span><span class="hist-time">'+escapeHTML(ts)+'<\/span><\/div><div class="hist-user">By: '+escapeHTML(d.builtBy||"unknown")+'<\/div>'+(partsHtml?'<div class="hist-parts">'+partsHtml+'<\/div>':'')+'<\/div>';
+        html+='<div class="history-item"><div class="hist-header"><span style="font-weight:700;color:#fdba74;">1 SSC Built<\/span><span class="hist-time">'+escapeHTML(ts)+'<\/span><\/div><div class="hist-user">By: '+escapeHTML(d.builtBy||"unknown")+' \u00b7 PO: <strong>'+escapeHTML(d.poNumber||"-")+'<\/strong> \u00b7 Job: <strong>'+escapeHTML(d.jobNumber||"-")+'<\/strong><\/div>'+(partsHtml?'<div class="hist-parts">'+partsHtml+'<\/div>':'')+'<\/div>';
       });
       container.innerHTML=html;
     })
@@ -757,13 +807,15 @@ function loadPOs(){
         item.dataset.partid=d.partId||"";
         item.dataset.qty=d.qty||0;
         item.dataset.status=st;
+        item.dataset.pono=d.poNumber||"";
+        item.dataset.jobno=d.jobNumber||"";
         var actionsHtml="";
         if(userRole==="admin"){
           if(st==="pending")actionsHtml+='<button class="btn btn-ghost po-action" style="padding:4px 10px;font-size:11px;" data-action="order">Mark Ordered<\/button>';
           if(st==="ordered")actionsHtml+='<button class="btn btn-success po-action" style="padding:4px 10px;font-size:11px;" data-action="receive">Mark Received (+stock)<\/button>';
           if(st!=="received")actionsHtml+='<button class="btn btn-danger po-action" style="padding:4px 10px;font-size:11px;" data-action="delete">Delete<\/button>';
         }
-        item.innerHTML='<div class="po-header"><div class="po-name">'+escapeHTML(d.partName||"-")+'<\/div><span class="badge '+escapeHTML(st)+'">'+escapeHTML(st)+'<\/span><\/div><div class="po-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 Qty: <strong>'+d.qty+'<\/strong> \u00b7 '+escapeHTML(ts)+'<\/div>'+(d.notes?'<div class="po-meta">'+escapeHTML(d.notes)+'<\/div>':'')+'<div class="po-actions">'+actionsHtml+'<\/div>';
+        item.innerHTML='<div class="po-header"><div class="po-name">'+escapeHTML(d.partName||"-")+'<\/div><span class="badge '+escapeHTML(st)+'">'+escapeHTML(st)+'<\/span><\/div><div class="po-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 Qty: <strong>'+d.qty+'<\/strong> \u00b7 '+escapeHTML(ts)+'<\/div><div class="po-meta">PO Ref: <strong>'+escapeHTML(d.poNumber||"-")+'<\/strong> \u00b7 Job: <strong>'+escapeHTML(d.jobNumber||"-")+'<\/strong><\/div>'+(d.notes?'<div class="po-meta">'+escapeHTML(d.notes)+'<\/div>':'')+'<div class="po-actions">'+actionsHtml+'<\/div>';
         container.appendChild(item);
       });
     })
@@ -774,9 +826,13 @@ function createPO(){
   var partId=$("poPartSelect").value;
   var qty=parseInt($("poQty").value,10)||1;
   var notes=$("poNotes").value.trim();
+  var poRef=$("poPONumber").value.trim();
+  var jobRef=$("poJobNumber").value.trim();
   var part=parts.find(function(p){return p.id===partId;});
   if(!part){showToast("Select a part","error");return;}
   if(qty<1){showToast("Qty must be at least 1","error");return;}
+  if(!poRef){showToast("PO Reference # is required","error");$("poPONumber").focus();return;}
+  if(!jobRef){showToast("Job Number is required","error");$("poJobNumber").focus();return;}
   var ref=db.collection("purchaseOrders").doc();
   ref.set({
     id:ref.id,
@@ -784,6 +840,8 @@ function createPO(){
     partName:part.name,
     partNumber:part.partNumber,
     qty:qty,
+    poNumber:poRef,
+    jobNumber:jobRef,
     status:"pending",
     notes:notes,
     createdAt:firebase.firestore.FieldValue.serverTimestamp(),
@@ -791,7 +849,7 @@ function createPO(){
     createdBy:currentUser?currentUser.email:"unknown"
   }).then(function(){
     showToast("Purchase order created","success");
-    $("poQty").value=1;$("poNotes").value="";
+    $("poQty").value=1;$("poNotes").value="";$("poPONumber").value="";$("poJobNumber").value="";
     switchPOTab("list");loadPOs();
   }).catch(function(e){showToast("Failed: "+e.message,"error");});
 }
@@ -802,7 +860,7 @@ function updatePOStatus(id,status){
     .catch(function(e){showToast("Failed: "+e.message,"error");});
 }
 
-function receivePO(id,partId,qty){
+function receivePO(id,partId,qty,poNumber,jobNumber){
   if(!confirm("Mark order as Received and add "+qty+" unit(s) to stock?"))return;
   var part=parts.find(function(p){return p.id===partId;});
   var batch=db.batch();
@@ -810,7 +868,7 @@ function receivePO(id,partId,qty){
   if(part){
     batch.update(db.collection("parts").doc(partId),{stock:part.stock+qty});
     var recAuditRef=db.collection("auditLog").doc();
-    batch.set(recAuditRef,{id:recAuditRef.id,partId:partId,partName:part.name,partNumber:part.partNumber,oldStock:part.stock,newStock:part.stock+qty,delta:qty,reason:"Received shipment",notes:"Purchase order received",changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+    batch.set(recAuditRef,{id:recAuditRef.id,partId:partId,partName:part.name,partNumber:part.partNumber,oldStock:part.stock,newStock:part.stock+qty,delta:qty,reason:"Received shipment",notes:"Purchase order received",poNumber:poNumber||"",jobNumber:jobNumber||"",changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()});
   }
   batch.commit()
     .then(function(){showToast("Order received \u2014 stock updated","success");loadPOs();})
@@ -825,10 +883,10 @@ function deletePO(id){
 }
 
 /* ========== AUDIT LOG ========== */
-function logAudit(partId,partName,partNumber,oldStock,newStock,reason,notes,batch){
+function logAudit(partId,partName,partNumber,oldStock,newStock,reason,notes,poNumber,jobNumber,batch){
   var delta=newStock-oldStock;
   var ref=db.collection("auditLog").doc();
-  var entry={id:ref.id,partId:partId,partName:partName,partNumber:partNumber,oldStock:oldStock,newStock:newStock,delta:delta,reason:reason||"",notes:notes||"",changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()};
+  var entry={id:ref.id,partId:partId,partName:partName,partNumber:partNumber,oldStock:oldStock,newStock:newStock,delta:delta,reason:reason||"",notes:notes||"",poNumber:poNumber||"",jobNumber:jobNumber||"",changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()};
   if(batch){batch.set(ref,entry);}
   else{ref.set(entry).catch(function(e){console.error("[Audit]",e);});}
 }
@@ -844,19 +902,25 @@ function promptStockChange(id,newValue){
   $("reasonPartInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Stock: <strong>'+p.stock+'<\/strong> → <strong>'+newValue+'<\/strong> ('+(delta>0?'+':'')+delta+')';
   $("reasonSelect").value=delta>0?"Received shipment":"Used in build";
   $("reasonNotes").value="";
+  $("reasonPO").value="";
+  $("reasonJob").value="";
   $("reasonModalBg").classList.add("show");
-  $("reasonNotes").focus();
+  $("reasonPO").focus();
 }
 
 function confirmStockChange(){
   if(!pendingStockChange)return;
   var reason=$("reasonSelect").value;
   var notes=$("reasonNotes").value.trim();
+  var poNumber=$("reasonPO").value.trim();
+  var jobNumber=$("reasonJob").value.trim();
+  if(!poNumber){showToast("PO Number is required","error");$("reasonPO").focus();return;}
+  if(!jobNumber){showToast("Job Number is required","error");$("reasonJob").focus();return;}
   var sc=pendingStockChange;
   pendingStockChange=null;
   $("reasonModalBg").classList.remove("show");
   db.collection("parts").doc(sc.id).update({stock:sc.newStock})
-    .then(function(){logAudit(sc.id,sc.partName,sc.partNumber,sc.oldStock,sc.newStock,reason,notes);showToast("Stock updated","success");})
+    .then(function(){logAudit(sc.id,sc.partName,sc.partNumber,sc.oldStock,sc.newStock,reason,notes,poNumber,jobNumber);showToast("Stock updated","success");})
     .catch(function(e){showToast("Update failed: "+e.message,"error");});
 }
 
@@ -875,7 +939,7 @@ function loadAuditLog(filter){
       var docs=[];
       snap.forEach(function(doc){docs.push(doc.data());});
       var term=(filter||"").trim().toLowerCase();
-      if(term)docs=docs.filter(function(d){return(d.partName||"").toLowerCase().includes(term)||(d.reason||"").toLowerCase().includes(term)||(d.notes||"").toLowerCase().includes(term)||(d.partNumber||"").toLowerCase().includes(term);});
+      if(term)docs=docs.filter(function(d){return(d.partName||"").toLowerCase().includes(term)||(d.reason||"").toLowerCase().includes(term)||(d.notes||"").toLowerCase().includes(term)||(d.partNumber||"").toLowerCase().includes(term)||(d.poNumber||"").toLowerCase().includes(term)||(d.jobNumber||"").toLowerCase().includes(term);});
       if(!docs.length){container.innerHTML='<div class="empty"><div class="big">&#x1F50D;<\/div><div>No entries match your filter.<\/div><\/div>';return;}
       var html="";
       docs.forEach(function(d){
@@ -883,7 +947,7 @@ function loadAuditLog(filter){
         var dClass=delta>0?"pos":delta<0?"neg":"neu";
         var dStr=(delta>0?"+":"")+delta;
         var ts=fmtDate(d.timestamp);
-        html+='<div class="audit-item"><div class="audit-header"><span class="audit-part">'+escapeHTML(d.partName||"-")+'<\/span><span class="audit-time">'+escapeHTML(ts)+'<\/span><\/div><div class="audit-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 By: '+escapeHTML(d.changedBy||"system")+'<\/div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;"><span class="audit-delta '+dClass+'">'+d.oldStock+' → '+d.newStock+' ('+dStr+')<\/span><span class="audit-reason">'+escapeHTML(d.reason||"")+'<\/span><\/div>'+(d.notes?'<div style="font-size:11px;color:#64748b;margin-top:3px;">'+escapeHTML(d.notes)+'<\/div>':'')+'<\/div>';
+        html+='<div class="audit-item"><div class="audit-header"><span class="audit-part">'+escapeHTML(d.partName||"-")+'<\/span><span class="audit-time">'+escapeHTML(ts)+'<\/span><\/div><div class="audit-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 By: '+escapeHTML(d.changedBy||"system")+(d.poNumber?' \u00b7 PO: <strong>'+escapeHTML(d.poNumber)+'<\/strong>':'')+(d.jobNumber?' \u00b7 Job: <strong>'+escapeHTML(d.jobNumber)+'<\/strong>':'')+'<\/div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;"><span class="audit-delta '+dClass+'">'+d.oldStock+' → '+d.newStock+' ('+dStr+')<\/span><span class="audit-reason">'+escapeHTML(d.reason||"")+'<\/span><\/div>'+(d.notes?'<div style="font-size:11px;color:#64748b;margin-top:3px;">'+escapeHTML(d.notes)+'<\/div>':'')+'<\/div>';
       });
       container.innerHTML=html;
     })
@@ -929,6 +993,37 @@ function deletePart(id){
   db.collection("parts").doc(id).delete()
     .then(function(){showToast("Part deleted","success");})
     .catch(function(e){showToast("Delete failed: "+e.message,"error");});
+}
+
+/* ========== SPARE TO PRODUCTION ========== */
+function moveToProduction(id){
+  var p=parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  $("spareToProPartId").value=p.id;
+  $("spareToProInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Part #: '+escapeHTML(p.partNumber)+' \u00b7 Current stock: <strong>'+p.stock+'<\/strong> units<br\/><span style="color:#94a3b8;font-size:11px;">This part will be reclassified from <em>Spare<\/em> to <em>Production<\/em> inventory.<\/span>';
+  $("spareToPoPO").value="";
+  $("spareToProJob").value="";
+  $("spareToProNotes").value="";
+  $("spareToProModalBg").classList.add("show");
+  $("spareToPoPO").focus();
+}
+
+function executeSpareToProduction(){
+  var id=$("spareToProPartId").value;
+  var poNumber=$("spareToPoPO").value.trim();
+  var jobNumber=$("spareToProJob").value.trim();
+  var notes=$("spareToProNotes").value.trim();
+  if(!poNumber){showToast("PO Number is required","error");$("spareToPoPO").focus();return;}
+  if(!jobNumber){showToast("Job Number is required","error");$("spareToProJob").focus();return;}
+  var p=parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  $("spareToProModalBg").classList.remove("show");
+  db.collection("parts").doc(id).update({mode:"production"})
+    .then(function(){
+      logAudit(id,p.name,p.partNumber,p.stock,p.stock,"Moved to Production",notes||"Transferred from spare to production inventory",poNumber,jobNumber);
+      showToast("Part moved to Production","success");
+    })
+    .catch(function(e){showToast("Failed: "+e.message,"error");});
 }
 
 /* ========== CSV IMPORT ========== */
@@ -1094,12 +1189,21 @@ $("addModalBg").addEventListener("click",function(e){if(e.target.id==="addModalB
 $("addSave").addEventListener("click",function(){
   var name=$("newName").value.trim();
   var min=parseInt($("newMin").value,10);
+  var initialStock=parseInt($("newStock").value,10)||0;
+  var poNumber=$("newPO").value.trim();
+  var jobNumber=$("newJob").value.trim();
   if(!name){showToast("Description is required","error");return;}
   if(!min||min<1){showToast("Qty must be >= 1","error");return;}
+  if(initialStock>0&&!poNumber){showToast("PO Number required when initial stock > 0","error");$("newPO").focus();return;}
+  if(initialStock>0&&!jobNumber){showToast("Job Number required when initial stock > 0","error");$("newJob").focus();return;}
   var ref=db.collection("parts").doc();
   var maxSn=parts.reduce(function(m,p){return Math.max(m,+p.sn||0);},0);
-  var doc={id:ref.id,sn:maxSn+1,name:name,company:$("newCompany").value.trim()||"-",partNumber:$("newPN").value.trim()||"-",min:min,stock:parseInt($("newStock").value,10)||0,unitPrice:parseFloat($("newPrice").value)||0,mode:$("newMode").value};
-  ref.set(doc).then(function(){$("addModalBg").classList.remove("show");showToast("Part added","success");}).catch(function(e){showToast("Add failed: "+e.message,"error");});
+  var doc={id:ref.id,sn:maxSn+1,name:name,company:$("newCompany").value.trim()||"-",partNumber:$("newPN").value.trim()||"-",min:min,stock:initialStock,unitPrice:parseFloat($("newPrice").value)||0,mode:$("newMode").value};
+  ref.set(doc).then(function(){
+    $("addModalBg").classList.remove("show");
+    showToast("Part added","success");
+    if(initialStock>0)logAudit(ref.id,name,doc.partNumber,0,initialStock,"Initial stock","Part added",poNumber,jobNumber);
+  }).catch(function(e){showToast("Add failed: "+e.message,"error");});
 });
 
 /* Build History */
@@ -1123,7 +1227,7 @@ $("poList").addEventListener("click",function(e){
   var id=item.dataset.poid;
   var action=btn.dataset.action;
   if(action==="order")updatePOStatus(id,"ordered");
-  else if(action==="receive")receivePO(id,item.dataset.partid,parseInt(item.dataset.qty,10)||0);
+  else if(action==="receive")receivePO(id,item.dataset.partid,parseInt(item.dataset.qty,10)||0,item.dataset.pono,item.dataset.jobno);
   else if(action==="delete")deletePO(id);
 });
 
@@ -1179,19 +1283,35 @@ $("auditClose").addEventListener("click",function(){$("auditModalBg").classList.
 $("auditModalBg").addEventListener("click",function(e){if(e.target.id==="auditModalBg")$("auditModalBg").classList.remove("show");});
 $("auditSearch").addEventListener("input",function(){loadAuditLog(this.value);});
 
-/* Inline edit/delete — event delegation on tbody and mobileList */
+/* Inline edit/delete/move — event delegation on tbody and mobileList */
 $("tbody").addEventListener("click",function(e){
   var editBtn=e.target.closest(".btn-row-edit");
   if(editBtn){openEditModal(editBtn.dataset.id);return;}
   var delBtn=e.target.closest(".btn-row-delete");
   if(delBtn){deletePart(delBtn.dataset.id);return;}
+  var moveBtn=e.target.closest(".btn-row-move");
+  if(moveBtn){moveToProduction(moveBtn.dataset.id);return;}
 });
 $("mobileList").addEventListener("click",function(e){
   var editBtn=e.target.closest(".btn-row-edit");
   if(editBtn){openEditModal(editBtn.dataset.id);return;}
   var delBtn=e.target.closest(".btn-row-delete");
   if(delBtn){deletePart(delBtn.dataset.id);return;}
+  var moveBtn=e.target.closest(".btn-row-move");
+  if(moveBtn){moveToProduction(moveBtn.dataset.id);return;}
 });
+
+/* Build SSC Modal */
+$("buildCancel").addEventListener("click",function(){$("buildModalBg").classList.remove("show");});
+$("buildModalBg").addEventListener("click",function(e){if(e.target.id==="buildModalBg")$("buildModalBg").classList.remove("show");});
+$("buildConfirm").addEventListener("click",executeBuild);
+$("buildJob").addEventListener("keydown",function(e){if(e.key==="Enter")executeBuild();});
+
+/* Spare to Production Modal */
+$("spareToProCancel").addEventListener("click",function(){$("spareToProModalBg").classList.remove("show");});
+$("spareToProModalBg").addEventListener("click",function(e){if(e.target.id==="spareToProModalBg")$("spareToProModalBg").classList.remove("show");});
+$("spareToProConfirm").addEventListener("click",executeSpareToProduction);
+$("spareToProNotes").addEventListener("keydown",function(e){if(e.key==="Enter")executeSpareToProduction();});
 
 bootAppCheck();
 </script>
