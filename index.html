@@ -251,7 +251,7 @@ td.actions { white-space: nowrap; }
     <button id="poBtn" class="btn btn-ghost">&#x1F6D2; Orders</button>
     <button id="addBtn" class="btn btn-primary admin-only">+ Add Part</button>
     <button id="importBtn" class="btn btn-ghost admin-only">&#x2B06; Import CSV</button>
-    <button id="auditBtn" class="btn btn-ghost">&#x1F4CB; Audit Log</button>
+    <button id="auditBtn" class="btn btn-ghost" aria-label="Audit Log">&#x1F4CB; Audit Log</button>
     <button id="reseedBtn" class="btn btn-warn admin-only">Reseed Full BOM</button>
   </section>
   <section class="card-wrap">
@@ -631,11 +631,11 @@ function render(){
     var tr=document.createElement("tr");
     tr.className="row-"+s;
     tr.dataset.partid=p.id;
-    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td><td class="actions"><button class="btn-row-edit" data-id="'+p.id+'" title="Edit part">&#x270F;<\/button> <button class="btn-row-delete" data-id="'+p.id+'" title="Delete part">&#x1F5D1;<\/button><\/td>';
+    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td><td class="actions"><button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button> <button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/td>';
     tbody.appendChild(tr);
 
     var card=document.createElement("div");card.className="mobile-card";card.dataset.partid=p.id;
-    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div style="display:flex;gap:6px;align-items:center;"><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div><button class="btn-row-edit" data-id="'+p.id+'" title="Edit">&#x270F;<\/button><button class="btn-row-delete" data-id="'+p.id+'" title="Delete">&#x1F5D1;<\/button><\/div><\/div>';
+    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div style="display:flex;gap:6px;align-items:center;"><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div><button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button><button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/div><\/div>';
     mlist.appendChild(card);
   });
 
@@ -833,6 +833,7 @@ function logAudit(partId,partName,partNumber,oldStock,newStock,reason,notes,batc
   else{ref.set(entry).catch(function(e){console.error("[Audit]",e);});}
 }
 
+var AUDIT_LOG_LIMIT=200;
 var pendingStockChange=null;
 function promptStockChange(id,newValue){
   var p=parts.find(function(x){return x.id===id;});
@@ -840,7 +841,7 @@ function promptStockChange(id,newValue){
   if(p.stock===newValue)return;
   pendingStockChange={id:id,oldStock:p.stock,newStock:newValue,partName:p.name,partNumber:p.partNumber};
   var delta=newValue-p.stock;
-  $("reasonPartInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Stock: <strong>'+p.stock+'<\/strong> \u2192 <strong>'+newValue+'<\/strong> ('+(delta>0?'+':'')+delta+')';
+  $("reasonPartInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Stock: <strong>'+p.stock+'<\/strong> → <strong>'+newValue+'<\/strong> ('+(delta>0?'+':'')+delta+')';
   $("reasonSelect").value=delta>0?"Received shipment":"Used in build";
   $("reasonNotes").value="";
   $("reasonModalBg").classList.add("show");
@@ -868,7 +869,7 @@ function openAuditModal(){
 function loadAuditLog(filter){
   var container=$("auditList");
   container.innerHTML='<div style="color:#64748b;font-size:13px;padding:20px;">Loading...<\/div>';
-  db.collection("auditLog").orderBy("timestamp","desc").limit(200).get()
+  db.collection("auditLog").orderBy("timestamp","desc").limit(AUDIT_LOG_LIMIT).get()
     .then(function(snap){
       if(snap.empty){container.innerHTML='<div class="empty"><div class="big">&#x1F4CB;<\/div><div>No audit entries yet.<\/div><\/div>';return;}
       var docs=[];
@@ -882,7 +883,7 @@ function loadAuditLog(filter){
         var dClass=delta>0?"pos":delta<0?"neg":"neu";
         var dStr=(delta>0?"+":"")+delta;
         var ts=fmtDate(d.timestamp);
-        html+='<div class="audit-item"><div class="audit-header"><span class="audit-part">'+escapeHTML(d.partName||"-")+'<\/span><span class="audit-time">'+escapeHTML(ts)+'<\/span><\/div><div class="audit-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 By: '+escapeHTML(d.changedBy||"system")+'<\/div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;"><span class="audit-delta '+dClass+'">'+d.oldStock+' \u2192 '+d.newStock+' ('+dStr+')<\/span><span class="audit-reason">'+escapeHTML(d.reason||"")+'<\/span><\/div>'+(d.notes?'<div style="font-size:11px;color:#64748b;margin-top:3px;">'+escapeHTML(d.notes)+'<\/div>':'')+'<\/div>';
+        html+='<div class="audit-item"><div class="audit-header"><span class="audit-part">'+escapeHTML(d.partName||"-")+'<\/span><span class="audit-time">'+escapeHTML(ts)+'<\/span><\/div><div class="audit-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 By: '+escapeHTML(d.changedBy||"system")+'<\/div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;"><span class="audit-delta '+dClass+'">'+d.oldStock+' → '+d.newStock+' ('+dStr+')<\/span><span class="audit-reason">'+escapeHTML(d.reason||"")+'<\/span><\/div>'+(d.notes?'<div style="font-size:11px;color:#64748b;margin-top:3px;">'+escapeHTML(d.notes)+'<\/div>':'')+'<\/div>';
       });
       container.innerHTML=html;
     })
