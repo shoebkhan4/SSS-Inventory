@@ -9,6 +9,7 @@
 <!-- Firebase compat SDK (loaded from CDN; degrades gracefully offline) -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
 
 <style>
   /* ---------- Reset & base ---------- */
@@ -425,6 +426,60 @@ const firebaseConfig = {
   measurementId: "G-VNDGDK1WSW"
 };
 firebase.initializeApp(firebaseConfig);
+
+/* ----- App Check (reCAPTCHA v3) -----
+   Diagnostic init: logs every step so failures are visible.
+   For local dev, run BEFORE the page loads in DevTools:
+     self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+*/
+console.log("[AppCheck] firebase global:", typeof firebase);
+console.log("[AppCheck] firebase.appCheck:", typeof firebase.appCheck);
+console.log("[AppCheck] firebase.appCheck.ReCaptchaV3Provider:",
+  firebase.appCheck && typeof firebase.appCheck.ReCaptchaV3Provider);
+
+let appCheckOk = false;
+let appCheckErr = null;
+
+if (typeof firebase.appCheck !== "function") {
+  appCheckErr = "firebase.appCheck is undefined — App Check SDK script tag failed to load (ad blocker? cache?)";
+  console.error("[AppCheck]", appCheckErr);
+} else {
+  try {
+    const provider = new firebase.appCheck.ReCaptchaV3Provider(
+      "6LdZVugsAAAAAEPkaPCPJ7xeD1RZLTfUiXPhrgh7"
+    );
+    firebase.appCheck().activate(provider, /* autoRefresh */ true);
+    appCheckOk = true;
+    console.log("[AppCheck] activate() succeeded — reCAPTCHA should load shortly");
+
+    // Try to fetch a token immediately so we get a real error if reCAPTCHA fails
+    firebase.appCheck().getToken(/* forceRefresh */ false)
+      .then(t => {
+        console.log("[AppCheck] ✓ token acquired, length:", (t && t.token || "").length);
+        const dot = document.getElementById("syncDot");
+        const tx  = document.getElementById("syncText");
+        if (dot && tx && tx.textContent === "Live") tx.textContent = "Live (verified)";
+      })
+      .catch(err => {
+        console.error("[AppCheck] ✗ getToken failed:", err);
+        const tx = document.getElementById("syncText");
+        if (tx) tx.textContent = "App Check token failed: " + (err.code || err.message);
+      });
+  } catch (e) {
+    appCheckErr = e && (e.message || String(e));
+    console.error("[AppCheck] activate() threw:", e);
+  }
+}
+
+// Watch for the reCAPTCHA loader script being injected
+setTimeout(() => {
+  const has = !!document.querySelector('script[src*="recaptcha"]');
+  console.log("[AppCheck] reCAPTCHA script in DOM after 2s?", has);
+  if (!has && appCheckOk) {
+    console.warn("[AppCheck] App Check activated but reCAPTCHA loader never appeared — likely an ad blocker or CSP is blocking it.");
+  }
+}, 2000);
+
 const db = firebase.firestore();
 
 /* ========== FULL BOM ========== */
@@ -816,5 +871,5 @@ $("addSave").addEventListener("click", async () => {
 
 setSync("", "Connecting…");
 </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9fb21bb96ed2c570',t:'MTc3ODY3OTk3NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
