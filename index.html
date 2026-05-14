@@ -386,7 +386,7 @@ function bootAppCheck() {
 }
 
 /* ========== AUTH ========== */
-var currentUser = { email: "inventory@local" };
+var currentUser = null;
 var userRole = "admin";
 
 function tryInitFirestoreSync() {
@@ -401,11 +401,11 @@ function updateAuthUI() {
 }
 
 function doSignIn() {
-  showToast("Login is temporarily disabled.", "error");
+  showToast("Login is temporarily disabled.");
 }
 
 function doRegister() {
-  showToast("Registration is temporarily disabled.", "error");
+  showToast("Registration is temporarily disabled.");
 }
 
 function showLoginErr(msg) {
