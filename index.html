@@ -339,52 +339,128 @@ firebase.initializeApp(firebaseConfig);
 
 const db = firebase.firestore();
 
-/* ========== APP CHECK (gatekeeper for Firestore) ========== */
-let appCheckOk = false;
+/* ========== APP CHECK (bulletproof gatekeeper) ========== */
+let appCheckReady = false;
 
-if (typeof firebase.appCheck !== "function") {
-  console.error("[AppCheck] SDK not loaded.");
-  setSync("err", "App Check SDK missing — Firestore blocked");
-  showToast("App Check SDK missing. Load blocked by security rules.", "error");
-  // DO NOT call initFirestoreSync()
-} else {
+async function bootAppCheck() {
+  if (typeof firebase.appCheck !== "function") {
+    console.error("[AppCheck] SDK not loaded");
+    setSync("err", "App Check SDK missing — Firestore blocked");
+    showToast("App Check SDK missing. Firestore will not start.", "error");
+    return;
+  }
+
   try {
     const provider = new firebase.appCheck.ReCaptchaV3Provider(
       "6LdZVugsAAAAAEPkaPCPJ7xeD1RZLTfUiXPhrgh7"
     );
     firebase.appCheck().activate(provider, /* autoRefresh */ true);
-    appCheckOk = true;
-    console.log("[AppCheck] activate() succeeded");
 
-    // ── CRITICAL: wait for token BEFORE starting Firestore ──
-    firebase.appCheck().getToken(false)
-      .then(tokenResult => {
-        const tok = (tokenResult && tokenResult.token) || "";
-        console.log("[AppCheck] ✓ token acquired, length:", tok.length);
-        setSync("live", "App Check verified — connecting…");
-        
-        // ONLY NOW start the listener
-        initFirestoreSync();
-      })
-      .catch(err => {
-        console.error("[AppCheck] ✗ getToken failed:", err);
-        setSync("err", "App Check token failed: " + (err.code || err.message));
-        showToast("App Check token failed. Firestore request blocked.", "error");
-        // DO NOT fall back to initFirestoreSync()
-      });
+    // 1. Explicitly await the first token (blocks until Google responds)
+    const tokenResult = await firebase.appCheck().getToken(false);
+    console.log("[AppCheck] token acquired, length:", (tokenResult && tokenResult.token || "").length);
 
-  } catch (e) {
-    console.error("[AppCheck] activate() threw:", e);
-    setSync("err", "App Check init error");
-    showToast("App Check failed to initialize.", "error");
-    // DO NOT fall back to initFirestoreSync()
+    // 2. CRITICAL: let SDK internals attach the interceptor to Firestore transport
+    await new Promise(r => setTimeout(r, 500));
+
+    appCheckReady = true;
+    setSync("live", "App Check OK — connecting Firestore…");
+    initFirestoreSync();
+
+  } catch (err) {
+    console.error("[AppCheck] boot failed:", err);
+
+    const isLocal = location.hostname === "localhost" ||
+                    location.hostname === "127.0.0.1" ||
+                    location.protocol === "file:";
+
+    if (isLocal) {
+      setSync("err", "Localhost blocked — use debug token");
+      showToast("Local testing requires App Check debug token (see console)", "error");
+      console.log(
+        "%c[AppCheck Debug Token Required for Local Testing]",
+        "font-size:14px;font-weight:bold;color:#f97316"
+      );
+      console.log("1. Firebase Console → Project Settings → App Check");
+      console.log("2. Add your app with a debug token (generate one there)");
+      console.log("3. Paste this ABOVE the Firebase <script> tags in your HTML:");
+      console.log(
+        '%c   <script>self.FIREBASE_APPCHECK_DEBUG_TOKEN = "YOUR_DEBUG_TOKEN";</script>',
+        "color:#4ade80"
+      );
+      console.log("4. Reload. The token bypasses reCAPTCHA and satisfies request.app != null");
+    } else {
+      setSync("err", "App Check failed: " + (err.code || err.message));
+      showToast("App Check / reCAPTCHA failed. Check domain & site key.", "error");
+    }
   }
 }
+
+/* ========== FIRESTORE SYNC (guarded) ========== */
+let unsubscribe = null;
+function initFirestoreSync() {
+  if (!appCheckReady) {
+    console.warn("[Firestore] blocked: App Check not ready");
+    return;
+  }
+  if (unsubscribe) return;
+
+  setSync("", "Connecting…");
+  const db = firebase.firestore();
+
+  unsubscribe = db.collection("parts").onSnapshot(
+    async (snap) => {
+      setSync("live", "Live");
+
+      // Seed once if empty
+      if (snap.empty && !seeded) {
+        seeded = true;
+        setSync("", "Seeding initial BOM…");
+        const batch = db.batch();
+        INITIAL_PARTS.forEach(p => batch.set(db.collection("parts").doc(p.id), p));
+        try {
+          await batch.commit();
+          showToast("Initial BOM seeded", "success");
+        } catch (e) {
+          showToast("Seed failed: " + e.message, "error");
+          console.error("[Seed] failed:", e);
+        }
+        return;
+      }
+
+      parts = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id:         data.id || d.id,
+          sn:         +data.sn || parseInt(data.id, 10) || 0,
+          name:       data.name || "(unnamed)",
+          company:    data.company || "—",
+          partNumber: data.partNumber || "—",
+          min:        +data.min || 1,
+          stock:      +data.stock || 0,
+          unitPrice:  +data.unitPrice || 0,
+          mode:       data.mode || "production",
+        };
+      });
+
+      $("lastUpdate").textContent = "Updated " + new Date().toLocaleTimeString();
+      render();
+    },
+    (err) => {
+      console.error("[Firestore] listener error:", err);
+      setSync("err", "Offline / blocked: " + (err.code || err.message));
+      showToast("Firestore: " + err.message, "error");
+    }
+  );
+}
+
+// Start boot sequence
+bootAppCheck();
 
 setTimeout(() => {
   const has = !!document.querySelector('script[src*="recaptcha"]');
   console.log("[AppCheck] reCAPTCHA script in DOM after 2s?", has);
-  if (!has && appCheckOk) {
+  if (!has) {
     console.warn("[AppCheck] reCAPTCHA loader never appeared — ad blocker / CSP / wrong site key?");
   }
 }, 2000);
