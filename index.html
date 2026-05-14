@@ -784,11 +784,13 @@ var STATE = {
   seeded: false,
   html5QrcodeScanner: null,
   importParsedRows: [],
-  /* chart instances — kept to allow proper destroy/recreate */
-  charts: {}
+  /* chart instances — kept to allow proper destroy/recreate on modal reopen */
+  charts: {},
+  /* Configuration constants */
+  AUDIT_LOG_LIMIT: 200,
+  /* Notification localStorage key — increment suffix when schema changes */
+  NOTIF_KEY: "ssc_notified_v1"
 };
-/* Backward-compatible aliases used throughout legacy code */
-var parts = STATE.parts;
 
 /* ========== HELPERS ========== */
 function $(id){return document.getElementById(id);}
@@ -827,7 +829,6 @@ function initFirestoreSync(){
         return;
       }
       STATE.parts=snap.docs.map(function(d){var data=d.data();return{id:data.id||d.id,sn:+data.sn||parseInt(data.id,10)||0,name:data.name||"(unnamed)",company:data.company||"-",partNumber:data.partNumber||"-",min:+data.min||1,stock:+data.stock||0,unitPrice:+data.unitPrice||0,mode:data.mode||"production",imageUrl:data.imageUrl||""};});
-      parts=STATE.parts; /* keep alias in sync */
       $("lastUpdate").textContent="Updated "+new Date().toLocaleTimeString();
       render();
       checkAndNotifyLowStock();
@@ -1119,9 +1120,6 @@ function logAudit(partId,partName,partNumber,oldStock,newStock,reason,notes,poNu
   else{ref.set(entry).catch(function(e){console.error("[Audit]",e);});}
 }
 
-/* Maximum audit log entries fetched and displayed in one load.
-   Older entries remain in Firestore but are not shown until the limit is raised. */
-var AUDIT_LOG_LIMIT=200;
 var pendingStockChange=null;
 function promptStockChange(id,newValue){
   var p=STATE.parts.find(function(x){return x.id===id;});
@@ -1163,7 +1161,7 @@ function openAuditModal(){
 function loadAuditLog(filter){
   var container=$("auditList");
   container.innerHTML='<div style="color:#64748b;font-size:13px;padding:20px;">Loading...<\/div>';
-  db.collection("auditLog").orderBy("timestamp","desc").limit(AUDIT_LOG_LIMIT).get()
+  db.collection("auditLog").orderBy("timestamp","desc").limit(STATE.AUDIT_LOG_LIMIT).get()
     .then(function(snap){
       if(snap.empty){container.innerHTML='<div class="empty"><div class="big">&#x1F4CB;<\/div><div>No audit entries yet.<\/div><\/div>';return;}
       var docs=[];
@@ -1417,7 +1415,7 @@ function handleImportFile(file){
     header:true,
     skipEmptyLines:true,
     complete:function(res){
-      importParsedRows=STATE.importParsedRows=[];
+      STATE.importParsedRows=[];
       var errors=[];
       /* Build a safe, lowercase key lookup from the first row */
       var safeKeys={};
@@ -1909,9 +1907,8 @@ function printQRLabels(){
 /* ========== PHASE 4: NOTIFICATIONS ========== */
 /* Tracks which part+status combos have already fired a browser notification
    (stored in localStorage so they survive page refresh) */
-var NOTIF_KEY="ssc_notified_v1";
-function getNotifiedSet(){try{return new Set(JSON.parse(localStorage.getItem(NOTIF_KEY)||"[]"));}catch(e){return new Set();}}
-function saveNotifiedSet(s){try{localStorage.setItem(NOTIF_KEY,JSON.stringify(Array.from(s)));}catch(e){}}
+function getNotifiedSet(){try{return new Set(JSON.parse(localStorage.getItem(STATE.NOTIF_KEY)||"[]"));}catch(e){return new Set();}}
+function saveNotifiedSet(s){try{localStorage.setItem(STATE.NOTIF_KEY,JSON.stringify(Array.from(s)));}catch(e){}}
 
 function requestNotificationPermission(){
   if(!("Notification" in window)){showToast("This browser does not support notifications","error");return;}

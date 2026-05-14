@@ -6,6 +6,9 @@
    offline persistence independently).
    ============================================= */
 
+/* IMPORTANT: Increment this version string on every deployment to force
+   all clients to pick up the new app shell from the network.
+   E.g. "ssc-inventory-v2", "ssc-inventory-v3", etc. */
 var CACHE_NAME = "ssc-inventory-v1";
 
 /* Resources to precache on install */
