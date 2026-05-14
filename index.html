@@ -272,7 +272,7 @@ td.actions { white-space: nowrap; }
     <button id="auditBtn" class="btn btn-ghost" aria-label="Audit Log">&#x1F4CB; Audit Log</button>
     <button id="reorderBtn" class="btn btn-ghost">&#x1F514; Reorder</button>
     <button id="exportBtn" class="btn btn-ghost">&#x1F4CA; Export</button>
-    <button id="productsBtn" class="btn btn-placeholder" title="Multi-Product BOM \u2014 coming in a future phase">&#x1F4E6; Products &#x25B8;</button>
+    <button id="productsBtn" class="btn btn-placeholder" title="Multi-Product BOM &mdash; coming in a future phase">&#x1F4E6; Products &#x25B8;</button>
     <button id="reseedBtn" class="btn btn-warn admin-only">Reseed Full BOM</button>
   </section>
   <section class="card-wrap">
@@ -1157,6 +1157,7 @@ function downloadCSV(filename,rows){
       return s;
     }).join(",");
   }).join("\r\n");
+  /* Prefix UTF-8 BOM so Excel opens the file with correct encoding automatically */
   var blob=new Blob(["\uFEFF"+content],{type:"text/csv;charset=utf-8;"});
   var url=URL.createObjectURL(blob);
   var a=document.createElement("a");
@@ -1233,7 +1234,7 @@ function loadReorderSuggestions(){
   lowParts.forEach(function(p){
     var s=statusOf(p);
     var shortfall=Math.max(0,p.min-p.stock);
-    var suggested=Math.max(p.min,shortfall+p.min); /* enough for at least 1 full build after order */
+    var suggested=Math.max(p.min,shortfall+p.min); /* order enough to cover shortfall + 1 full build */
     html+='<div class="reorder-item"><div style="flex:1;min-width:0;">'
       +'<div class="ri-name">'+escapeHTML(p.name)+'<\/div>'
       +'<div class="ri-meta">Part #: '+escapeHTML(p.partNumber)+' \u00b7 '+escapeHTML(p.company)+'<\/div>'
