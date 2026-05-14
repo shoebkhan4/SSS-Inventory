@@ -11,7 +11,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghqhZmdczILJ7P09fScbrz6G7ALt8IJf2RQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
 /* FIX 1: Original had ", ::before" - fixed to "*, ::before" */
@@ -688,7 +688,7 @@ function loadBuildHistory(){
         var ts=fmtDate(d.timestamp);
         var partsHtml="";
         if(d.partsUsed&&d.partsUsed.length){
-          partsHtml=d.partsUsed.slice(0,5).map(function(p){return escapeHTML(p.name)+" (&times;"+p.qty+")"}).join("<br/>");
+          partsHtml=d.partsUsed.slice(0,5).map(function(p){return escapeHTML(p.name)+" (\u00d7"+p.qty+")"}).join("<br/>");
           if(d.partsUsed.length>5)partsHtml+="<br/>\u2026and "+(d.partsUsed.length-5)+" more parts";
         }
         html+='<div class="history-item"><div class="hist-header"><span style="font-weight:700;color:#fdba74;">1 SSC Built<\/span><span class="hist-time">'+escapeHTML(ts)+'<\/span><\/div><div class="hist-user">By: '+escapeHTML(d.builtBy||"unknown")+'<\/div>'+(partsHtml?'<div class="hist-parts">'+partsHtml+'<\/div>':'')+'<\/div>';
@@ -736,20 +736,26 @@ function loadPOs(){
         container.innerHTML='<div class="empty"><div class="big">&#x1F6D2;<\/div><div>No purchase orders yet.<\/div><\/div>';
         return;
       }
-      var html="";
+      container.innerHTML="";
       snap.forEach(function(doc){
         var d=doc.data();
         var ts=fmtDate(d.createdAt);
         var st=d.status||"pending";
-        var actions="";
+        var item=document.createElement("div");
+        item.className="po-item";
+        item.dataset.poid=d.id;
+        item.dataset.partid=d.partId||"";
+        item.dataset.qty=d.qty||0;
+        item.dataset.status=st;
+        var actionsHtml="";
         if(userRole==="admin"){
-          if(st==="pending")actions+='<button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;" onclick="updatePOStatus(\''+d.id+'\',\'ordered\')">Mark Ordered<\/button>';
-          if(st==="ordered")actions+='<button class="btn btn-success" style="padding:4px 10px;font-size:11px;" onclick="receivePO(\''+d.id+'\',\''+d.partId+'\','+d.qty+')">Mark Received (+stock)<\/button>';
-          if(st!=="received")actions+='<button class="btn btn-danger" style="padding:4px 10px;font-size:11px;" onclick="deletePO(\''+d.id+'\')">Delete<\/button>';
+          if(st==="pending")actionsHtml+='<button class="btn btn-ghost po-action" style="padding:4px 10px;font-size:11px;" data-action="order">Mark Ordered<\/button>';
+          if(st==="ordered")actionsHtml+='<button class="btn btn-success po-action" style="padding:4px 10px;font-size:11px;" data-action="receive">Mark Received (+stock)<\/button>';
+          if(st!=="received")actionsHtml+='<button class="btn btn-danger po-action" style="padding:4px 10px;font-size:11px;" data-action="delete">Delete<\/button>';
         }
-        html+='<div class="po-item"><div class="po-header"><div class="po-name">'+escapeHTML(d.partName||"-")+'<\/div><span class="badge '+escapeHTML(st)+'">'+escapeHTML(st)+'<\/span><\/div><div class="po-meta">Part #: '+escapeHTML(d.partNumber||"-")+' &middot; Qty: <strong>'+d.qty+'<\/strong> &middot; '+escapeHTML(ts)+'<\/div>'+(d.notes?'<div class="po-meta">'+escapeHTML(d.notes)+'<\/div>':'')+'<div class="po-actions">'+actions+'<\/div><\/div>';
+        item.innerHTML='<div class="po-header"><div class="po-name">'+escapeHTML(d.partName||"-")+'<\/div><span class="badge '+escapeHTML(st)+'">'+escapeHTML(st)+'<\/span><\/div><div class="po-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 Qty: <strong>'+d.qty+'<\/strong> \u00b7 '+escapeHTML(ts)+'<\/div>'+(d.notes?'<div class="po-meta">'+escapeHTML(d.notes)+'<\/div>':'')+'<div class="po-actions">'+actionsHtml+'<\/div>';
+        container.appendChild(item);
       });
-      container.innerHTML=html;
     })
     .catch(function(e){container.innerHTML='<div style="color:#f87171;padding:16px;">Failed to load: '+escapeHTML(e.message)+'<\/div>';});
 }
@@ -815,26 +821,37 @@ function openImportModal(){
 
 function handleImportFile(file){
   if(!file)return;
+  /* Dangerous prototype keys that must never be used as property names */
+  var FORBIDDEN_KEYS=new Set(["__proto__","constructor","prototype"]);
   Papa.parse(file,{
     header:true,
     skipEmptyLines:true,
     complete:function(res){
       importParsedRows=[];
       var errors=[];
+      /* Build a safe, lowercase key lookup from the first row */
+      var safeKeys={};
+      if(res.data.length>0){
+        Object.keys(res.data[0]).forEach(function(k){
+          var lk=k.toLowerCase().trim();
+          if(!FORBIDDEN_KEYS.has(lk))safeKeys[lk]=k;
+        });
+      }
       res.data.forEach(function(row,i){
-        function col(names){
+        function getCol(names){
           for(var n=0;n<names.length;n++){
-            for(var k in row){if(k.toLowerCase().trim()===names[n])return(row[k]||"").toString().trim();}
+            var origKey=safeKeys[names[n]];
+            if(origKey!==undefined){var v=(row[origKey]||"").toString().trim();if(v)return v;}
           }
           return"";
         }
-        var name=col(["description","name","item","part description"]);
-        var company=col(["company","vendor","supplier","manufacturer"]);
-        var partNumber=col(["part number","part#","partnumber","part no","pn"]);
-        var minStr=col(["req/ssc","req per ssc","min","qty per ssc","required","qty required"]);
-        var stockStr=col(["stock","initial stock","current stock","qty on hand","on hand"]);
-        var priceStr=col(["unit price","unit$","price","unit cost","cost"]);
-        var modeStr=col(["mode","type"]);
+        var name=getCol(["description","name","item","part description"]);
+        var company=getCol(["company","vendor","supplier","manufacturer"]);
+        var partNumber=getCol(["part number","part#","partnumber","part no","pn"]);
+        var minStr=getCol(["req/ssc","req per ssc","min","qty per ssc","required","qty required"]);
+        var stockStr=getCol(["stock","initial stock","current stock","qty on hand","on hand"]);
+        var priceStr=getCol(["unit price","unit$","price","unit cost","cost"]);
+        var modeStr=getCol(["mode","type"]);
         if(!name){errors.push("Row "+(i+2)+": missing Description");return;}
         importParsedRows.push({
           name:name,
@@ -860,16 +877,19 @@ function doImport(){
   if(!importParsedRows.length)return;
   $("importConfirm").disabled=true;
   var maxSn=parts.reduce(function(m,p){return Math.max(m,+p.sn||0);},0);
+  /* Build a part-number index for O(1) lookup during import */
+  var partIndex={};
+  parts.forEach(function(p){if(p.partNumber&&p.partNumber!=="-")partIndex[p.partNumber.toLowerCase()]=p;});
   var batch=db.batch();
   var added=0,updated=0;
   importParsedRows.forEach(function(row){
-    var existing=row.partNumber!=="-"?parts.find(function(p){return p.partNumber.toLowerCase()===row.partNumber.toLowerCase();}):null;
+    var existing=row.partNumber!=="-"?partIndex[row.partNumber.toLowerCase()]:null;
     if(existing){
       batch.update(db.collection("parts").doc(existing.id),{name:row.name,company:row.company,min:row.min,stock:row.stock,unitPrice:row.unitPrice,mode:row.mode});
       updated++;
     } else {
-      var id=Date.now().toString()+"-"+added;
-      batch.set(db.collection("parts").doc(id),{id:id,sn:++maxSn,name:row.name,company:row.company,partNumber:row.partNumber,min:row.min,stock:row.stock,unitPrice:row.unitPrice,mode:row.mode});
+      var ref=db.collection("parts").doc();
+      batch.set(ref,{id:ref.id,sn:++maxSn,name:row.name,company:row.company,partNumber:row.partNumber,min:row.min,stock:row.stock,unitPrice:row.unitPrice,mode:row.mode});
       added++;
     }
   });
@@ -895,7 +915,7 @@ function startScanner(){
     function(decodedText){ handleScanResult(decodedText); },
     function(){}
   ).catch(function(e){
-    $("scanNoMatch").textContent="Camera unavailable: "+e;
+    $("scanNoMatch").textContent="Camera unavailable: "+(e.message||String(e));
     $("scanNoMatch").style.display="block";
   });
 }
@@ -955,10 +975,10 @@ $("addSave").addEventListener("click",function(){
   var min=parseInt($("newMin").value,10);
   if(!name){showToast("Description is required","error");return;}
   if(!min||min<1){showToast("Qty must be >= 1","error");return;}
-  var id=Date.now().toString();
+  var ref=db.collection("parts").doc();
   var maxSn=parts.reduce(function(m,p){return Math.max(m,+p.sn||0);},0);
-  var doc={id:id,sn:maxSn+1,name:name,company:$("newCompany").value.trim()||"-",partNumber:$("newPN").value.trim()||"-",min:min,stock:parseInt($("newStock").value,10)||0,unitPrice:parseFloat($("newPrice").value)||0,mode:$("newMode").value};
-  db.collection("parts").doc(id).set(doc).then(function(){$("addModalBg").classList.remove("show");showToast("Part added","success");}).catch(function(e){showToast("Add failed: "+e.message,"error");});
+  var doc={id:ref.id,sn:maxSn+1,name:name,company:$("newCompany").value.trim()||"-",partNumber:$("newPN").value.trim()||"-",min:min,stock:parseInt($("newStock").value,10)||0,unitPrice:parseFloat($("newPrice").value)||0,mode:$("newMode").value};
+  ref.set(doc).then(function(){$("addModalBg").classList.remove("show");showToast("Part added","success");}).catch(function(e){showToast("Add failed: "+e.message,"error");});
 });
 
 /* Build History */
@@ -973,6 +993,18 @@ $("poModalBg").addEventListener("click",function(e){if(e.target.id==="poModalBg"
 $("poTabBar").addEventListener("click",function(e){var b=e.target.closest(".tab-btn");if(!b||!b.dataset.potab)return;switchPOTab(b.dataset.potab);});
 $("poCancelCreate").addEventListener("click",function(){switchPOTab("list");});
 $("poSaveBtn").addEventListener("click",createPO);
+/* PO action delegation - eliminates inline onclick handlers */
+$("poList").addEventListener("click",function(e){
+  var btn=e.target.closest(".po-action");
+  if(!btn)return;
+  var item=btn.closest(".po-item");
+  if(!item)return;
+  var id=item.dataset.poid;
+  var action=btn.dataset.action;
+  if(action==="order")updatePOStatus(id,"ordered");
+  else if(action==="receive")receivePO(id,item.dataset.partid,parseInt(item.dataset.qty,10)||0);
+  else if(action==="delete")deletePO(id);
+});
 
 /* CSV Import */
 $("importBtn").addEventListener("click",openImportModal);
