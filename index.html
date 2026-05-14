@@ -161,7 +161,7 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
 <body>
 
 <!-- ===== LOGIN MODAL ===== -->
-<div class="modal-bg show" id="loginModalBg" style="z-index:200;">
+<div class="modal-bg" id="loginModalBg" style="z-index:200;">
   <div class="modal" style="max-width:380px;">
     <div class="brand" style="justify-content:center;margin-bottom:20px;">
       <div class="brand-mark">SSC</div>
@@ -362,7 +362,7 @@ function bootAppCheck() {
     firebase.appCheck().getToken(false)
       .then(function(r){
         console.log("[AppCheck] token len:", (r&&r.token||"").length);
-        setTimeout(function(){ appCheckReady=true; setSync("live","App Check OK - connecting..."); tryInitFirestoreSync(); }, 600);
+        setTimeout(function(){ appCheckReady=true; setSync("live","App Check OK - connecting..."); initFirestoreSyncIfReady(); }, 600);
       })
       .catch(function(err){
         console.error("[AppCheck] getToken failed:", err);
@@ -387,83 +387,25 @@ function bootAppCheck() {
 
 /* ========== AUTH ========== */
 var currentUser = null;
-var userRole = "viewer";
+var userRole = "admin";
 
-auth.onAuthStateChanged(function(user) {
-  if (user) {
-    currentUser = user;
-    $("loginModalBg").classList.remove("show");
-    $("loginErr").style.display = "none";
-    db.collection("userRoles").doc(user.uid).get()
-      .then(function(doc) {
-        if (doc.exists) {
-          userRole = doc.data().role || "viewer";
-          updateAuthUI();
-          tryInitFirestoreSync();
-        } else {
-          /* First-time sign-in: check if any roles exist; if none, this user is admin */
-          db.collection("userRoles").limit(1).get()
-            .then(function(snap) {
-              userRole = snap.empty ? "admin" : "viewer";
-              db.collection("userRoles").doc(user.uid).set({ role: userRole, email: user.email });
-              updateAuthUI();
-              tryInitFirestoreSync();
-            })
-            .catch(function() { userRole = "viewer"; updateAuthUI(); tryInitFirestoreSync(); });
-        }
-      })
-      .catch(function() { userRole = "viewer"; updateAuthUI(); tryInitFirestoreSync(); });
-  } else {
-    currentUser = null;
-    userRole = "viewer";
-    $("loginModalBg").classList.add("show");
-    $("userPill").style.display = "none";
-    updateAuthUI();
-  }
-});
-
-function tryInitFirestoreSync() {
-  if (appCheckReady && currentUser) initFirestoreSync();
+function initFirestoreSyncIfReady() {
+  if (appCheckReady) initFirestoreSync();
 }
 
 function updateAuthUI() {
   document.querySelectorAll(".admin-only").forEach(function(el) {
-    el.style.display = userRole === "admin" ? "" : "none";
+    el.style.display = "";
   });
-  if (currentUser) {
-    $("userEmail").textContent = currentUser.email;
-    $("userRoleBadge").textContent = userRole;
-    $("userRoleBadge").className = "role-badge " + userRole;
-    $("userPill").style.display = "flex";
-  }
+  $("userPill").style.display = "none";
 }
 
 function doSignIn() {
-  var email = $("loginEmail").value.trim();
-  var pw = $("loginPassword").value;
-  if (!email || !pw) { showLoginErr("Email and password are required."); return; }
-  $("loginBtn").disabled = true;
-  $("loginErr").style.display = "none";
-  auth.signInWithEmailAndPassword(email, pw)
-    .catch(function(e) { showLoginErr(e.message); $("loginBtn").disabled = false; });
+  showToast("Login is temporarily disabled.");
 }
 
 function doRegister() {
-  var email = $("regEmail").value.trim();
-  var pw = $("regPassword").value;
-  if (!email || !pw) { showLoginErr("Email and password are required."); return; }
-  if (pw.length < 6) { showLoginErr("Password must be at least 6 characters."); return; }
-  $("registerBtn").disabled = true;
-  $("loginErr").style.display = "none";
-  auth.createUserWithEmailAndPassword(email, pw)
-    .then(function() { showToast("Account created \u2014 welcome!", "success"); })
-    .catch(function(e) { showLoginErr(e.message); $("registerBtn").disabled = false; });
-}
-
-function showLoginErr(msg) {
-  var el = $("loginErr");
-  el.textContent = msg;
-  el.style.display = "block";
+  showToast("Registration is temporarily disabled.");
 }
 
 /* ========== FULL BOM ========== */
@@ -545,7 +487,7 @@ function escapeHTML(s){return String(s).replace(/[&<>"']/g,function(c){return({"
 /* ========== FIRESTORE SYNC ========== */
 var unsubscribe=null;
 function initFirestoreSync(){
-  if(!appCheckReady||!currentUser){return;}
+  if(!appCheckReady){return;}
   if(unsubscribe)return;
   setSync("","Connecting...");
   unsubscribe=db.collection("parts").onSnapshot(
