@@ -178,6 +178,20 @@ td.actions { white-space: nowrap; }
 .audit-item .audit-reason { font-size: 11px; color: #fdba74; background: rgba(249,115,22,.1); border: 1px solid rgba(249,115,22,.2); border-radius: 4px; padding: 1px 6px; display: inline-block; }
 /* Label hint text (e.g. "(required if initial stock > 0)") */
 .label-hint { color: #64748b; font-size: 10px; font-weight: 400; }
+/* Viewer mode: stock controls visible but non-interactive */
+.viewer-mode .stock-ctrl button,
+.viewer-mode .stock-ctrl input { pointer-events: none; opacity: .45; cursor: default; }
+/* Placeholder / coming-soon toolbar button */
+.btn-placeholder { background: transparent; border: 1px dashed #334155; color: #64748b; }
+.btn-placeholder:hover { filter: none; border-color: #f97316; color: #f97316; border-style: solid; }
+/* Reorder suggestion rows */
+.reorder-item { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.reorder-item .ri-name { font-weight: 600; color: #f1f5f9; font-size: 13px; }
+.reorder-item .ri-meta { font-size: 11px; color: #94a3b8; margin-top: 2px; line-height: 1.7; }
+/* Export modal rows */
+.export-item { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.export-item-label { font-size: 13px; font-weight: 600; color: #f1f5f9; }
+.export-item-hint { font-size: 11px; color: #64748b; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -256,6 +270,9 @@ td.actions { white-space: nowrap; }
     <button id="addBtn" class="btn btn-primary admin-only">+ Add Part</button>
     <button id="importBtn" class="btn btn-ghost admin-only">&#x2B06; Import CSV</button>
     <button id="auditBtn" class="btn btn-ghost" aria-label="Audit Log">&#x1F4CB; Audit Log</button>
+    <button id="reorderBtn" class="btn btn-ghost">&#x1F514; Reorder</button>
+    <button id="exportBtn" class="btn btn-ghost">&#x1F4CA; Export</button>
+    <button id="productsBtn" class="btn btn-placeholder" title="Multi-Product BOM \u2014 coming in a future phase">&#x1F4E6; Products &#x25B8;</button>
     <button id="reseedBtn" class="btn btn-warn admin-only">Reseed Full BOM</button>
   </section>
   <section class="card-wrap">
@@ -428,6 +445,74 @@ td.actions { white-space: nowrap; }
     <button class="btn btn-ghost" id="spareToProCancel">Cancel</button>
     <button class="btn btn-primary" id="spareToProConfirm">Move to Production</button>
   </div>
+</div></div>
+
+<!-- ===== DELETE PART MODAL ===== -->
+<div class="modal-bg" id="deleteModalBg" style="z-index:130;"><div class="modal" style="max-width:440px;">
+  <h2>&#x1F5D1; Remove Part</h2>
+  <div id="deletePartInfo" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;color:#cbd5e1;"></div>
+  <input type="hidden" id="deletePartId" />
+  <label>Reason for Removal</label>
+  <select id="deleteReason" style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px 10px;border-radius:6px;font-size:14px;">
+    <option value="Obsolete">Obsolete / End of Life</option>
+    <option value="Replaced">Replaced by another part</option>
+    <option value="Damaged/Scrap">Damaged / Scrap</option>
+    <option value="Data Entry Error">Data Entry Error</option>
+    <option value="Other">Other</option>
+  </select>
+  <label>PO Number</label><input id="deletePO" type="text" placeholder="e.g. PO-2024-001" />
+  <label>Job Number</label><input id="deleteJob" type="text" placeholder="e.g. JOB-123" />
+  <label>Notes (optional)</label><input id="deleteNotes" type="text" placeholder="Additional details..." />
+  <div class="actions">
+    <button class="btn btn-ghost" id="deleteCancel">Cancel</button>
+    <button class="btn btn-danger" id="deleteConfirm">Delete Part</button>
+  </div>
+</div></div>
+
+<!-- ===== REORDER SUGGESTIONS MODAL ===== -->
+<div class="modal-bg" id="reorderModalBg"><div class="modal" style="max-width:680px;">
+  <h2>&#x1F514; Reorder Suggestions</h2>
+  <div id="reorderList" style="max-height:460px;overflow-y:auto;">
+    <div class="empty"><div class="big">&#x2705;</div><div>All parts are sufficiently stocked.</div></div>
+  </div>
+  <div class="actions"><button class="btn btn-ghost" id="reorderClose">Close</button></div>
+</div></div>
+
+<!-- ===== EXPORT MODAL ===== -->
+<div class="modal-bg" id="exportModalBg"><div class="modal" style="max-width:500px;">
+  <h2>&#x1F4CA; Export Data</h2>
+  <div class="export-item">
+    <div><div class="export-item-label">Inventory &mdash; Current View</div><div class="export-item-hint">Exports currently visible / filtered parts</div></div>
+    <button class="btn btn-primary" id="exportInventoryBtn" style="white-space:nowrap;">&#x2B07; CSV</button>
+  </div>
+  <div class="export-item">
+    <div><div class="export-item-label">Full Inventory</div><div class="export-item-hint">All parts (all modes, no filter)</div></div>
+    <button class="btn btn-primary" id="exportInventoryAllBtn" style="white-space:nowrap;">&#x2B07; CSV</button>
+  </div>
+  <div class="export-item">
+    <div><div class="export-item-label">Audit Log</div><div class="export-item-hint">Last 500 stock-change entries</div></div>
+    <button class="btn btn-ghost" id="exportAuditBtn" style="white-space:nowrap;">&#x2B07; CSV</button>
+  </div>
+  <div class="export-item">
+    <div><div class="export-item-label">Build History</div><div class="export-item-hint">All SSC build records</div></div>
+    <button class="btn btn-ghost" id="exportBuildsBtn" style="white-space:nowrap;">&#x2B07; CSV</button>
+  </div>
+  <div class="actions" style="margin-top:14px;"><button class="btn btn-ghost" id="exportClose">Close</button></div>
+</div></div>
+
+<!-- ===== MULTI-PRODUCT BOM PLACEHOLDER ===== -->
+<div class="modal-bg" id="productsModalBg"><div class="modal" style="max-width:480px;">
+  <h2>&#x1F4E6; Products / Multi-Product BOM</h2>
+  <div style="background:#0f172a;border:1px dashed #334155;border-radius:10px;padding:22px;text-align:center;margin-bottom:14px;">
+    <div style="font-size:36px;margin-bottom:10px;">&#x1F6A7;</div>
+    <div style="font-weight:700;color:#fdba74;font-size:15px;margin-bottom:8px;">Coming in a Future Phase</div>
+    <div style="font-size:13px;color:#94a3b8;line-height:1.8;">Multi-product BOM support will allow you to define multiple product types (e.g. SSC-Standard, SSC-Pro, SSP) each with their own bill of materials.<br/><br/>Parts shared across products will be tracked in a single inventory pool with per-product consumption rates and independent build capacity calculations.</div>
+  </div>
+  <div style="background:#111827;border:1px solid #1f2937;border-radius:8px;padding:12px;margin-bottom:14px;">
+    <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Current Configuration</div>
+    <div style="font-size:13px;color:#cbd5e1;">Single product: <strong style="color:#fdba74;">SSC Unit</strong><br/>Bill of Materials is managed in the Production parts list.</div>
+  </div>
+  <div class="actions"><button class="btn btn-ghost" id="productsClose">Close</button></div>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -999,12 +1084,36 @@ function saveEditPart(){
     .catch(function(e){showToast("Update failed: "+e.message,"error");});
 }
 
-function deletePart(id){
+function openDeleteModal(id){
   var p=parts.find(function(x){return x.id===id;});
   if(!p)return;
-  if(!confirm("Delete part:\n\""+p.name+"\" ("+p.partNumber+")\n\nThis cannot be undone."))return;
-  db.collection("parts").doc(id).delete()
-    .then(function(){showToast("Part deleted","success");})
+  $("deletePartId").value=p.id;
+  $("deletePartInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Part #: '+escapeHTML(p.partNumber)+' \u00b7 Current stock: <strong>'+p.stock+'<\/strong>';
+  $("deleteReason").value="Obsolete";
+  $("deletePO").value="";
+  $("deleteJob").value="";
+  $("deleteNotes").value="";
+  $("deleteModalBg").classList.add("show");
+  $("deletePO").focus();
+}
+
+function executeDeletePart(){
+  var id=$("deletePartId").value;
+  var reason=$("deleteReason").value;
+  var poNumber=$("deletePO").value.trim();
+  var jobNumber=$("deleteJob").value.trim();
+  var notes=$("deleteNotes").value.trim();
+  if(!poNumber){showToast("PO Number is required","error");$("deletePO").focus();return;}
+  if(!jobNumber){showToast("Job Number is required","error");$("deleteJob").focus();return;}
+  var p=parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  $("deleteModalBg").classList.remove("show");
+  var batch=db.batch();
+  batch.delete(db.collection("parts").doc(id));
+  var auditRef=db.collection("auditLog").doc();
+  batch.set(auditRef,{id:auditRef.id,partId:id,partName:p.name,partNumber:p.partNumber,oldStock:p.stock,newStock:0,delta:-p.stock,reason:"Part Removed: "+reason,notes:notes||"",poNumber:poNumber,jobNumber:jobNumber,changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+  batch.commit()
+    .then(function(){showToast("Part removed and audit logged","success");})
     .catch(function(e){showToast("Delete failed: "+e.message,"error");});
 }
 
@@ -1037,6 +1146,114 @@ function executeSpareToProduction(){
       showToast("Part moved to Production","success");
     })
     .catch(function(e){showToast("Failed: "+e.message,"error");});
+}
+
+/* ========== EXPORT ========== */
+function downloadCSV(filename,rows){
+  var content=rows.map(function(r){
+    return r.map(function(v){
+      var s=String(v==null?"":v);
+      if(/[,"\n\r]/.test(s))s='"'+s.replace(/"/g,'""')+'"';
+      return s;
+    }).join(",");
+  }).join("\r\n");
+  var blob=new Blob(["\uFEFF"+content],{type:"text/csv;charset=utf-8;"});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement("a");
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+}
+
+function exportInventoryCSV(all){
+  var header=["SN","Description","Company","Part Number","Req/SSC","Stock","Status","Unit Price ($)","Line Value ($)","Mode"];
+  var term=searchTerm.trim().toLowerCase();
+  var data=all?parts.slice():parts.filter(function(p){
+    if(mode!=="all"&&p.mode!==mode)return false;
+    if(term){var blob=(p.name+" "+p.company+" "+p.partNumber).toLowerCase();if(!blob.includes(term))return false;}
+    var st=statusOf(p);
+    if(statusFilter!=="all"&&st!==statusFilter&&!(statusFilter==="low"&&st==="warn"))return false;
+    return true;
+  });
+  var rows=[header].concat(data.map(function(p){
+    return[p.sn,p.name,p.company,p.partNumber,p.min,p.stock,statusLabel(statusOf(p)),p.unitPrice.toFixed(2),(p.stock*p.unitPrice).toFixed(2),p.mode];
+  }));
+  downloadCSV(all?"inventory_full.csv":"inventory_filtered.csv",rows);
+  showToast("Inventory exported ("+data.length+" parts)","success");
+}
+
+function exportAuditCSV(){
+  showToast("Preparing audit log\u2026");
+  db.collection("auditLog").orderBy("timestamp","desc").limit(500).get()
+    .then(function(snap){
+      var header=["Timestamp","Part Name","Part Number","Changed By","Old Stock","New Stock","Delta","Reason","Notes","PO Number","Job Number"];
+      var rows=[header];
+      snap.forEach(function(doc){
+        var d=doc.data();
+        rows.push([fmtDate(d.timestamp),d.partName||"",d.partNumber||"",d.changedBy||"",d.oldStock||0,d.newStock||0,d.delta||0,d.reason||"",d.notes||"",d.poNumber||"",d.jobNumber||""]);
+      });
+      downloadCSV("audit_log.csv",rows);
+      showToast("Audit log exported ("+snap.size+" entries)","success");
+    })
+    .catch(function(e){showToast("Export failed: "+e.message,"error");});
+}
+
+function exportBuildsCSV(){
+  showToast("Preparing build history\u2026");
+  db.collection("buildHistory").orderBy("timestamp","desc").limit(500).get()
+    .then(function(snap){
+      var header=["Timestamp","Built By","PO Number","Job Number","Part Count"];
+      var rows=[header];
+      snap.forEach(function(doc){
+        var d=doc.data();
+        rows.push([fmtDate(d.timestamp),d.builtBy||"",d.poNumber||"",d.jobNumber||"",d.partCount||0]);
+      });
+      downloadCSV("build_history.csv",rows);
+      showToast("Build history exported ("+snap.size+" entries)","success");
+    })
+    .catch(function(e){showToast("Export failed: "+e.message,"error");});
+}
+
+/* ========== REORDER SUGGESTIONS ========== */
+function openReorderModal(){
+  $("reorderModalBg").classList.add("show");
+  loadReorderSuggestions();
+}
+
+function loadReorderSuggestions(){
+  var container=$("reorderList");
+  var orderMap={out:0,low:1,warn:2};
+  var lowParts=parts.filter(function(p){var s=statusOf(p);return s==="out"||s==="low"||s==="warn";})
+    .slice().sort(function(a,b){return(orderMap[statusOf(a)]||3)-(orderMap[statusOf(b)]||3);});
+  if(!lowParts.length){
+    container.innerHTML='<div class="empty"><div class="big">&#x2705;<\/div><div>All parts are sufficiently stocked.<\/div><\/div>';
+    return;
+  }
+  var html='<div style="font-size:12px;color:#64748b;margin-bottom:10px;">'+lowParts.length+' part(s) need attention<\/div>';
+  lowParts.forEach(function(p){
+    var s=statusOf(p);
+    var shortfall=Math.max(0,p.min-p.stock);
+    var suggested=Math.max(p.min,shortfall+p.min); /* enough for at least 1 full build after order */
+    html+='<div class="reorder-item"><div style="flex:1;min-width:0;">'
+      +'<div class="ri-name">'+escapeHTML(p.name)+'<\/div>'
+      +'<div class="ri-meta">Part #: '+escapeHTML(p.partNumber)+' \u00b7 '+escapeHTML(p.company)+'<\/div>'
+      +'<div class="ri-meta">Stock: <strong>'+p.stock+'<\/strong> \u00b7 Required/SSC: <strong>'+p.min+'<\/strong>'+(shortfall>0?' \u00b7 Shortfall: <strong style="color:#f87171;">'+shortfall+'<\/strong>':'')
+      +' \u00b7 Suggested order qty: <strong style="color:#4ade80;">'+suggested+'<\/strong><\/div>'
+      +'<\/div>'
+      +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">'
+      +'<span class="badge '+s+'">'+statusLabel(s)+'<\/span>'
+      +(userRole==="admin"?'<button class="btn btn-ghost ri-po-btn" data-partid="'+p.id+'" style="padding:4px 10px;font-size:11px;white-space:nowrap;">+ Create PO<\/button>':'')
+      +'<\/div><\/div>';
+  });
+  container.innerHTML=html;
+}
+
+/* ========== PRODUCTS / MULTI-BOM PLACEHOLDER ========== */
+/* TODO (future phase): Replace placeholder with full multi-product BOM support.
+   Each product will have its own BOM referencing shared parts collection.
+   Build capacity and stock deduction will be per-product. */
+function openProductsModal(){
+  $("productsModalBg").classList.add("show");
 }
 
 /* ========== CSV IMPORT ========== */
@@ -1196,7 +1413,7 @@ $("buildBtn").addEventListener("click",buildOneSSC);
 $("reseedBtn").addEventListener("click",reseedBOM);
 
 /* Add Part */
-$("addBtn").addEventListener("click",function(){["newName","newCompany","newPN"].forEach(function(id){$(id).value="";});$("newMin").value=1;$("newStock").value=0;$("newPrice").value=0;$("newMode").value="production";$("addModalBg").classList.add("show");$("newName").focus();});
+$("addBtn").addEventListener("click",function(){["newName","newCompany","newPN","newPO","newJob"].forEach(function(id){$(id).value="";});$("newMin").value=1;$("newStock").value=0;$("newPrice").value=0;$("newMode").value="production";$("addModalBg").classList.add("show");$("newName").focus();});
 $("addCancel").addEventListener("click",function(){$("addModalBg").classList.remove("show");});
 $("addModalBg").addEventListener("click",function(e){if(e.target.id==="addModalBg")$("addModalBg").classList.remove("show");});
 $("addSave").addEventListener("click",function(){
@@ -1301,7 +1518,7 @@ $("tbody").addEventListener("click",function(e){
   var editBtn=e.target.closest(".btn-row-edit");
   if(editBtn){openEditModal(editBtn.dataset.id);return;}
   var delBtn=e.target.closest(".btn-row-delete");
-  if(delBtn){deletePart(delBtn.dataset.id);return;}
+  if(delBtn){openDeleteModal(delBtn.dataset.id);return;}
   var moveBtn=e.target.closest(".btn-row-move");
   if(moveBtn){moveToProduction(moveBtn.dataset.id);return;}
 });
@@ -1309,7 +1526,7 @@ $("mobileList").addEventListener("click",function(e){
   var editBtn=e.target.closest(".btn-row-edit");
   if(editBtn){openEditModal(editBtn.dataset.id);return;}
   var delBtn=e.target.closest(".btn-row-delete");
-  if(delBtn){deletePart(delBtn.dataset.id);return;}
+  if(delBtn){openDeleteModal(delBtn.dataset.id);return;}
   var moveBtn=e.target.closest(".btn-row-move");
   if(moveBtn){moveToProduction(moveBtn.dataset.id);return;}
 });
@@ -1325,6 +1542,40 @@ $("spareToProCancel").addEventListener("click",function(){$("spareToProModalBg")
 $("spareToProModalBg").addEventListener("click",function(e){if(e.target.id==="spareToProModalBg")$("spareToProModalBg").classList.remove("show");});
 $("spareToProConfirm").addEventListener("click",executeSpareToProduction);
 $("spareToProNotes").addEventListener("keydown",function(e){if(e.key==="Enter")executeSpareToProduction();});
+
+/* Delete Part Modal */
+$("deleteCancel").addEventListener("click",function(){$("deleteModalBg").classList.remove("show");});
+$("deleteModalBg").addEventListener("click",function(e){if(e.target.id==="deleteModalBg")$("deleteModalBg").classList.remove("show");});
+$("deleteConfirm").addEventListener("click",executeDeletePart);
+$("deleteNotes").addEventListener("keydown",function(e){if(e.key==="Enter")executeDeletePart();});
+
+/* Reorder Modal */
+$("reorderBtn").addEventListener("click",openReorderModal);
+$("reorderClose").addEventListener("click",function(){$("reorderModalBg").classList.remove("show");});
+$("reorderModalBg").addEventListener("click",function(e){if(e.target.id==="reorderModalBg")$("reorderModalBg").classList.remove("show");});
+$("reorderList").addEventListener("click",function(e){
+  var btn=e.target.closest(".ri-po-btn");
+  if(!btn)return;
+  var partId=btn.dataset.partid;
+  $("reorderModalBg").classList.remove("show");
+  openPOModal();
+  switchPOTab("create");
+  if(partId)$("poPartSelect").value=partId;
+});
+
+/* Export Modal */
+$("exportBtn").addEventListener("click",function(){$("exportModalBg").classList.add("show");});
+$("exportClose").addEventListener("click",function(){$("exportModalBg").classList.remove("show");});
+$("exportModalBg").addEventListener("click",function(e){if(e.target.id==="exportModalBg")$("exportModalBg").classList.remove("show");});
+$("exportInventoryBtn").addEventListener("click",function(){exportInventoryCSV(false);});
+$("exportInventoryAllBtn").addEventListener("click",function(){exportInventoryCSV(true);});
+$("exportAuditBtn").addEventListener("click",exportAuditCSV);
+$("exportBuildsBtn").addEventListener("click",exportBuildsCSV);
+
+/* Products / Multi-BOM Placeholder */
+$("productsBtn").addEventListener("click",openProductsModal);
+$("productsClose").addEventListener("click",function(){$("productsModalBg").classList.remove("show");});
+$("productsModalBg").addEventListener("click",function(e){if(e.target.id==="productsModalBg")$("productsModalBg").classList.remove("show");});
 
 bootAppCheck();
 </script>
