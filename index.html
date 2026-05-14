@@ -161,7 +161,7 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
 <body>
 
 <!-- ===== LOGIN MODAL ===== -->
-<div class="modal-bg" id="loginModalBg" style="z-index:200;display:none;">
+<div class="modal-bg" id="loginModalBg" style="z-index:200;">
   <div class="modal" style="max-width:380px;">
     <div class="brand" style="justify-content:center;margin-bottom:20px;">
       <div class="brand-mark">SSC</div>
@@ -362,7 +362,7 @@ function bootAppCheck() {
     firebase.appCheck().getToken(false)
       .then(function(r){
         console.log("[AppCheck] token len:", (r&&r.token||"").length);
-        setTimeout(function(){ appCheckReady=true; setSync("live","App Check OK - connecting..."); tryInitFirestoreSync(); }, 600);
+        setTimeout(function(){ appCheckReady=true; setSync("live","App Check OK - connecting..."); initFirestoreSyncIfReady(); }, 600);
       })
       .catch(function(err){
         console.error("[AppCheck] getToken failed:", err);
@@ -389,7 +389,7 @@ function bootAppCheck() {
 var currentUser = null;
 var userRole = "admin";
 
-function tryInitFirestoreSync() {
+function initFirestoreSyncIfReady() {
   if (appCheckReady) initFirestoreSync();
 }
 
@@ -406,12 +406,6 @@ function doSignIn() {
 
 function doRegister() {
   showToast("Registration is temporarily disabled.");
-}
-
-function showLoginErr(msg) {
-  var el = $("loginErr");
-  el.textContent = msg;
-  el.style.display = "block";
 }
 
 /* ========== FULL BOM ========== */
