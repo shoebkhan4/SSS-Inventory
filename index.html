@@ -456,12 +456,16 @@ if (typeof firebase.appCheck !== "function") {
     firebase.appCheck().getToken(/* forceRefresh */ false)
       .then(t => {
         console.log("[AppCheck] ✓ token acquired, length:", (t && t.token || "").length);
+        // ONLY START SYNC HERE
+        initFirestoreSync(); 
         const dot = document.getElementById("syncDot");
         const tx  = document.getElementById("syncText");
-        if (dot && tx && tx.textContent === "Live") tx.textContent = "Live (verified)";
+        if (dot && tx && tx.textContent === "Live(verified)") tx.textContent = "Live (verified)";
       })
       .catch(err => {
         console.error("[AppCheck] ✗ getToken failed:", err);
+       
+         initFirestoreSync(); 
         const tx = document.getElementById("syncText");
         if (tx) tx.textContent = "App Check token failed: " + (err.code || err.message);
       });
@@ -580,7 +584,7 @@ function setSync(state, text) {
 }
 
 /* ========== FIRESTORE SYNC ========== */
-db.collection("parts").onSnapshot(
+function initFirestoreSync() {db.collection("parts").onSnapshot(
   async (snap) => {
     setSync("live", "Live");
     if (snap.empty && !seeded) {
@@ -615,7 +619,7 @@ db.collection("parts").onSnapshot(
     showToast("Firestore: " + err.message, "error");
   }
 );
-
+}
 /* ========== RENDER ========== */
 function render() {
   // visible set per mode + filters + search
