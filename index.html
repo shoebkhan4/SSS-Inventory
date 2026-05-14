@@ -13,6 +13,13 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghqhZmdczILJ7P09fScbrz6G7ALt8IJf2RQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(function(e){ console.warn("[SW] Registration failed:", e); });
+  }
+</script>
 <style>
 /* FIX 1: Original had ", ::before" - fixed to "*, ::before" */
 *, ::before, *::after { box-sizing: border-box; }
@@ -156,9 +163,86 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
 @media (max-width: 760px) {
   .wrap { padding: 12px; } .top { padding: 10px 14px; } .brand h1 { font-size: 14px; } .brand .sub { display: none; } .kpi .value { font-size: 22px; } .table-scroll { display: none; } .mobile-list { display: block; }
 }
+/* Row action buttons */
+.btn-row-edit, .btn-row-delete { border: 0; border-radius: 6px; padding: 4px 7px; font-size: 13px; cursor: pointer; transition: background .12s; }
+.btn-row-edit { background: transparent; color: #60a5fa; }
+.btn-row-edit:hover { background: rgba(96,165,250,.15); }
+.btn-row-delete { background: transparent; color: #f87171; }
+.btn-row-delete:hover { background: rgba(248,113,113,.15); }
+.btn-row-move { border: 1px solid rgba(52,211,153,.25); border-radius: 6px; padding: 3px 7px; font-size: 11px; font-weight: 600; cursor: pointer; transition: background .12s; background: rgba(52,211,153,.08); color: #34d399; }
+.btn-row-move:hover { background: rgba(52,211,153,.2); }
+td.actions { white-space: nowrap; }
+/* Audit log items */
+.audit-item { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.audit-item .audit-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
+.audit-item .audit-part { font-weight: 600; color: #f1f5f9; font-size: 13px; flex: 1; }
+.audit-item .audit-time { font-size: 12px; color: #94a3b8; white-space: nowrap; }
+.audit-item .audit-meta { font-size: 12px; color: #94a3b8; margin-bottom: 3px; }
+.audit-item .audit-delta { font-size: 13px; font-weight: 600; }
+.audit-item .audit-delta.pos { color: #4ade80; }
+.audit-item .audit-delta.neg { color: #f87171; }
+.audit-item .audit-delta.neu { color: #94a3b8; }
+.audit-item .audit-reason { font-size: 11px; color: #fdba74; background: rgba(249,115,22,.1); border: 1px solid rgba(249,115,22,.2); border-radius: 4px; padding: 1px 6px; display: inline-block; }
+/* Label hint text (e.g. "(required if initial stock > 0)") */
+.label-hint { color: #64748b; font-size: 10px; font-weight: 400; }
+/* Viewer mode: stock controls visible but non-interactive */
+.viewer-mode .stock-ctrl button,
+.viewer-mode .stock-ctrl input { pointer-events: none; opacity: .45; cursor: default; }
+/* Placeholder / coming-soon toolbar button */
+.btn-placeholder { background: transparent; border: 1px dashed #334155; color: #64748b; }
+.btn-placeholder:hover { filter: none; border-color: #f97316; color: #f97316; border-style: solid; }
+/* Reorder suggestion rows */
+.reorder-item { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.reorder-item .ri-name { font-weight: 600; color: #f1f5f9; font-size: 13px; }
+.reorder-item .ri-meta { font-size: 11px; color: #94a3b8; margin-top: 2px; line-height: 1.7; }
+/* Export modal rows */
+.export-item { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.export-item-label { font-size: 13px; font-weight: 600; color: #f1f5f9; }
+.export-item-hint { font-size: 11px; color: #64748b; margin-top: 2px; }
+/* ===== PHASE 3: ANALYTICS ===== */
+.analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.an-kpi { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px 14px; }
+.an-kpi .an-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.an-kpi .an-val { font-size: 22px; font-weight: 700; color: #f8fafc; }
+.an-kpi .an-sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.chart-box { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px; }
+.chart-box h4 { margin: 0 0 10px; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
+@media (max-width: 600px) { .chart-row { grid-template-columns: 1fr; } }
+/* ===== PHASE 3: VENDORS ===== */
+.vendor-card { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; cursor: pointer; transition: border-color .15s; }
+.vendor-card:hover { border-color: #334155; }
+.vendor-card .vc-name { font-weight: 600; color: #f1f5f9; font-size: 13px; }
+.vendor-card .vc-meta { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.vendor-detail { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 14px; margin-top: 10px; }
+/* ===== PHASE 3: QR LABELS ===== */
+.qr-part-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #1f2937; }
+.qr-part-row:last-child { border-bottom: 0; }
+.qr-part-row label { flex: 1; font-size: 13px; color: #e5e7eb; cursor: pointer; }
+.qr-part-row .qr-pn { font-size: 11px; color: #64748b; font-family: ui-monospace, monospace; }
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; color: black; }
+  .label-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; padding: 8mm; }
+  .label-item { border: 1px solid #ccc; border-radius: 4px; padding: 4mm; display: flex; flex-direction: column; align-items: center; gap: 3mm; page-break-inside: avoid; }
+  .label-item .l-name { font-size: 9pt; font-weight: 700; text-align: center; color: black; word-break: break-word; }
+  .label-item .l-pn { font-size: 8pt; font-family: monospace; color: #333; }
+  .label-item .l-co { font-size: 7pt; color: #555; }
+}
+/* ===== PHASE 4: PART IMAGES ===== */
+.part-thumb { width: 32px; height: 32px; border-radius: 5px; object-fit: cover; border: 1px solid #334155; background: #1e293b; vertical-align: middle; }
+.part-thumb-placeholder { width: 32px; height: 32px; border-radius: 5px; background: #1e293b; border: 1px solid #334155; display: inline-flex; align-items: center; justify-content: center; color: #334155; font-size: 16px; vertical-align: middle; }
+/* ===== PHASE 4: NOTIFICATIONS ===== */
+.notif-banner { background: rgba(249,115,22,.12); border: 1px solid rgba(249,115,22,.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: #fdba74; }
+/* ===== PHASE 4: OFFLINE ===== */
+.offline-bar { background: rgba(239,68,68,.15); border-bottom: 1px solid rgba(239,68,68,.3); padding: 7px 20px; font-size: 12px; color: #f87171; display: none; align-items: center; gap: 8px; }
+.offline-bar.show { display: flex; }
 </style>
 </head>
 <body>
+
+<!-- Offline indicator bar -->
+<div class="offline-bar" id="offlineBar">&#x1F4F5; You are offline &mdash; showing cached data. Changes will sync when reconnected.</div>
 
 <!-- ===== LOGIN MODAL ===== -->
 <div class="modal-bg" id="loginModalBg" style="z-index:200;">
@@ -233,11 +317,21 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
     <button id="poBtn" class="btn btn-ghost">&#x1F6D2; Orders</button>
     <button id="addBtn" class="btn btn-primary admin-only">+ Add Part</button>
     <button id="importBtn" class="btn btn-ghost admin-only">&#x2B06; Import CSV</button>
+    <button id="auditBtn" class="btn btn-ghost" aria-label="Audit Log">&#x1F4CB; Audit Log</button>
+    <button id="analyticsBtn" class="btn btn-ghost">&#x1F4CA; Analytics</button>
+    <button id="vendorsBtn" class="btn btn-ghost">&#x1F3ED; Vendors</button>
+    <button id="qrLabelsBtn" class="btn btn-ghost">&#x1F3F7; QR Labels</button>
+    <button id="notifBtn" class="btn btn-ghost" title="Notifications">&#x1F514; Alerts</button>
+    <button id="reorderBtn" class="btn btn-ghost">&#x1F6D2; Reorder</button>
+    <button id="exportBtn" class="btn btn-ghost">&#x2B07; Export</button>
+    <button id="userMgmtBtn" class="btn btn-placeholder" title="User Management &mdash; available with Auth phase">&#x1F465; Users &#x25B8;</button>
+    <button id="productsBtn" class="btn btn-placeholder" title="Multi-Product BOM &mdash; coming in a future phase">&#x1F4E6; Products &#x25B8;</button>
     <button id="reseedBtn" class="btn btn-warn admin-only">Reseed Full BOM</button>
   </section>
   <section class="card-wrap">
     <div class="table-scroll"><table id="invTable"><thead><tr>
       <th data-sort="sn" class="sn">SN</th>
+      <th style="width:44px;" aria-label="Image"></th>
       <th data-sort="name" class="desc">Description</th>
       <th data-sort="company">Company</th>
       <th data-sort="partNumber">Part #</th>
@@ -246,6 +340,7 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
       <th data-sort="status">Status</th>
       <th data-sort="unitPrice" class="price">Unit $</th>
       <th data-sort="lineValue" class="price">Line $</th>
+      <th aria-label="Part Actions">Actions</th>
     </tr></thead><tbody id="tbody"></tbody></table></div>
     <div class="mobile-list" id="mobileList"></div>
     <div id="emptyState" class="empty" style="display:none;"><div class="big">&#x1F4E6;</div><div>No parts match your filters.</div></div>
@@ -263,6 +358,9 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
   <label>Initial Stock</label><input id="newStock" type="number" min="0" value="0" />
   <label>Unit Price ($)</label><input id="newPrice" type="number" min="0" step="0.01" value="0" />
   <label>Mode</label><select id="newMode"><option value="production">Production</option><option value="spare">Spare</option></select>
+  <label>Image URL <span class="label-hint">(optional — paste a direct image link)</span></label><input id="newImageUrl" type="url" placeholder="https://..." />
+  <label>PO Number <span class="label-hint">(required if initial stock &gt; 0)</span></label><input id="newPO" type="text" placeholder="e.g. PO-2024-001" />
+  <label>Job Number <span class="label-hint">(required if initial stock &gt; 0)</span></label><input id="newJob" type="text" placeholder="e.g. JOB-123" />
   <div class="actions"><button class="btn btn-ghost" id="addCancel">Cancel</button><button class="btn btn-primary" id="addSave">Add Part</button></div>
 </div></div>
 
@@ -289,7 +387,9 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
     <label>Part</label>
     <select id="poPartSelect" style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px 10px;border-radius:6px;font-size:14px;"></select>
     <label>Qty to Order</label><input id="poQty" type="number" min="1" value="1" />
-    <label>Vendor / Notes</label><input id="poNotes" type="text" placeholder="e.g. Order from Phoenix Contact - PO#1234" />
+    <label>Vendor / Notes</label><input id="poNotes" type="text" placeholder="e.g. Order from Phoenix Contact" />
+    <label>PO Reference #</label><input id="poPONumber" type="text" placeholder="e.g. PO-2024-001" />
+    <label>Job Number</label><input id="poJobNumber" type="text" placeholder="e.g. JOB-123" />
     <div class="actions">
       <button class="btn btn-ghost" id="poCancelCreate">Cancel</button>
       <button class="btn btn-primary" id="poSaveBtn">Create Order</button>
@@ -330,6 +430,209 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
   </div>
 </div></div>
 
+<!-- ===== EDIT PART MODAL ===== -->
+<div class="modal-bg" id="editModalBg"><div class="modal">
+  <h2>Edit Part</h2>
+  <input type="hidden" id="editPartId" />
+  <label>Description</label><input id="editName" type="text" />
+  <label>Company / Vendor</label><input id="editCompany" type="text" />
+  <label>Part Number</label><input id="editPN" type="text" />
+  <label>Qty Required per SSC</label><input id="editMin" type="number" min="1" />
+  <label>Unit Price ($)</label><input id="editPrice" type="number" min="0" step="0.01" />
+  <label>Mode</label><select id="editMode"><option value="production">Production</option><option value="spare">Spare</option></select>
+  <label>Image URL <span class="label-hint">(optional)</span></label><input id="editImageUrl" type="url" placeholder="https://..." />
+  <div class="actions"><button class="btn btn-ghost" id="editCancel">Cancel</button><button class="btn btn-primary" id="editSave">Save Changes</button></div>
+</div></div>
+
+<!-- ===== STOCK REASON MODAL ===== -->
+<div class="modal-bg" id="reasonModalBg" style="z-index:120;"><div class="modal" style="max-width:400px;">
+  <h2>Stock Adjustment</h2>
+  <div id="reasonPartInfo" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;color:#cbd5e1;"></div>
+  <label>Reason</label>
+  <select id="reasonSelect" style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px 10px;border-radius:6px;font-size:14px;">
+    <option value="Received shipment">Received shipment</option>
+    <option value="Used in build">Used in build</option>
+    <option value="Damaged/Scrap">Damaged / Scrap</option>
+    <option value="Audit correction">Audit correction</option>
+    <option value="Other">Other</option>
+  </select>
+  <label>Notes (optional)</label><input id="reasonNotes" type="text" placeholder="Additional details..." />
+  <label>PO Number</label><input id="reasonPO" type="text" placeholder="e.g. PO-2024-001" />
+  <label>Job Number</label><input id="reasonJob" type="text" placeholder="e.g. JOB-123" />
+  <div class="actions">
+    <button class="btn btn-ghost" id="reasonCancel">Cancel</button>
+    <button class="btn btn-primary" id="reasonConfirm">Confirm</button>
+  </div>
+</div></div>
+
+<!-- ===== AUDIT LOG MODAL ===== -->
+<div class="modal-bg" id="auditModalBg"><div class="modal" style="max-width:680px;">
+  <h2>&#x1F4CB; Audit Log</h2>
+  <div style="margin-bottom:12px;">
+    <input id="auditSearch" type="search" placeholder="Filter by part name, part #, or reason..." style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px 10px;border-radius:6px;font-size:13px;" />
+  </div>
+  <div id="auditList" style="max-height:460px;overflow-y:auto;">
+    <div class="empty"><div class="big">&#x1F4CB;</div><div>No audit entries yet.</div></div>
+  </div>
+  <div class="actions"><button class="btn btn-ghost" id="auditClose">Close</button></div>
+</div></div>
+
+<!-- ===== BUILD SSC MODAL ===== -->
+<div class="modal-bg" id="buildModalBg" style="z-index:130;"><div class="modal" style="max-width:440px;">
+  <h2>&#x1F527; Build 1 SSC Unit</h2>
+  <div id="buildInfo" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;color:#cbd5e1;"></div>
+  <label>PO Number</label><input id="buildPO" type="text" placeholder="e.g. PO-2024-001" />
+  <label>Job Number</label><input id="buildJob" type="text" placeholder="e.g. JOB-123" />
+  <div class="actions">
+    <button class="btn btn-ghost" id="buildCancel">Cancel</button>
+    <button class="btn btn-success" id="buildConfirm">&#x2705; Build 1 SSC</button>
+  </div>
+</div></div>
+
+<!-- ===== SPARE TO PRODUCTION MODAL ===== -->
+<div class="modal-bg" id="spareToProModalBg" style="z-index:130;"><div class="modal" style="max-width:420px;">
+  <h2>&#x2197; Move to Production</h2>
+  <div id="spareToProInfo" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;color:#cbd5e1;"></div>
+  <input type="hidden" id="spareToProPartId" />
+  <label>PO Number</label><input id="spareToPoPO" type="text" placeholder="e.g. PO-2024-001" />
+  <label>Job Number</label><input id="spareToProJob" type="text" placeholder="e.g. JOB-123" />
+  <label>Notes (optional)</label><input id="spareToProNotes" type="text" placeholder="Reason for moving to production..." />
+  <div class="actions">
+    <button class="btn btn-ghost" id="spareToProCancel">Cancel</button>
+    <button class="btn btn-primary" id="spareToProConfirm">Move to Production</button>
+  </div>
+</div></div>
+
+<!-- ===== DELETE PART MODAL ===== -->
+<div class="modal-bg" id="deleteModalBg" style="z-index:130;"><div class="modal" style="max-width:440px;">
+  <h2>&#x1F5D1; Remove Part</h2>
+  <div id="deletePartInfo" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;color:#cbd5e1;"></div>
+  <input type="hidden" id="deletePartId" />
+  <label>Reason for Removal</label>
+  <select id="deleteReason" style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px 10px;border-radius:6px;font-size:14px;">
+    <option value="Obsolete">Obsolete / End of Life</option>
+    <option value="Replaced">Replaced by another part</option>
+    <option value="Damaged/Scrap">Damaged / Scrap</option>
+    <option value="Data Entry Error">Data Entry Error</option>
+    <option value="Other">Other</option>
+  </select>
+  <label>PO Number</label><input id="deletePO" type="text" placeholder="e.g. PO-2024-001" />
+  <label>Job Number</label><input id="deleteJob" type="text" placeholder="e.g. JOB-123" />
+  <label>Notes (optional)</label><input id="deleteNotes" type="text" placeholder="Additional details..." />
+  <div class="actions">
+    <button class="btn btn-ghost" id="deleteCancel">Cancel</button>
+    <button class="btn btn-danger" id="deleteConfirm">Delete Part</button>
+  </div>
+</div></div>
+
+<!-- ===== REORDER SUGGESTIONS MODAL ===== -->
+<div class="modal-bg" id="reorderModalBg"><div class="modal" style="max-width:680px;">
+  <h2>&#x1F514; Reorder Suggestions</h2>
+  <div id="reorderList" style="max-height:460px;overflow-y:auto;">
+    <div class="empty"><div class="big">&#x2705;</div><div>All parts are sufficiently stocked.</div></div>
+  </div>
+  <div class="actions"><button class="btn btn-ghost" id="reorderClose">Close</button></div>
+</div></div>
+
+<!-- ===== EXPORT MODAL ===== -->
+<div class="modal-bg" id="exportModalBg"><div class="modal" style="max-width:500px;">
+  <h2>&#x1F4CA; Export Data</h2>
+  <div class="export-item">
+    <div><div class="export-item-label">Inventory &mdash; Current View</div><div class="export-item-hint">Exports currently visible / filtered parts</div></div>
+    <button class="btn btn-primary" id="exportInventoryBtn" style="white-space:nowrap;">&#x2B07; CSV</button>
+  </div>
+  <div class="export-item">
+    <div><div class="export-item-label">Full Inventory</div><div class="export-item-hint">All parts (all modes, no filter)</div></div>
+    <button class="btn btn-primary" id="exportInventoryAllBtn" style="white-space:nowrap;">&#x2B07; CSV</button>
+  </div>
+  <div class="export-item">
+    <div><div class="export-item-label">Audit Log</div><div class="export-item-hint">Last 500 stock-change entries</div></div>
+    <button class="btn btn-ghost" id="exportAuditBtn" style="white-space:nowrap;">&#x2B07; CSV</button>
+  </div>
+  <div class="export-item">
+    <div><div class="export-item-label">Build History</div><div class="export-item-hint">All SSC build records</div></div>
+    <button class="btn btn-ghost" id="exportBuildsBtn" style="white-space:nowrap;">&#x2B07; CSV</button>
+  </div>
+  <div class="actions" style="margin-top:14px;"><button class="btn btn-ghost" id="exportClose">Close</button></div>
+</div></div>
+
+<!-- ===== MULTI-PRODUCT BOM PLACEHOLDER ===== -->
+<div class="modal-bg" id="productsModalBg"><div class="modal" style="max-width:480px;">
+  <h2>&#x1F4E6; Products / Multi-Product BOM</h2>
+  <div style="background:#0f172a;border:1px dashed #334155;border-radius:10px;padding:22px;text-align:center;margin-bottom:14px;">
+    <div style="font-size:36px;margin-bottom:10px;">&#x1F6A7;</div>
+    <div style="font-weight:700;color:#fdba74;font-size:15px;margin-bottom:8px;">Coming in a Future Phase</div>
+    <div style="font-size:13px;color:#94a3b8;line-height:1.8;">Multi-product BOM support will allow you to define multiple product types (e.g. SSC-Standard, SSC-Pro, SSP) each with their own bill of materials.<br/><br/>Parts shared across products will be tracked in a single inventory pool with per-product consumption rates and independent build capacity calculations.</div>
+  </div>
+  <div style="background:#111827;border:1px solid #1f2937;border-radius:8px;padding:12px;margin-bottom:14px;">
+    <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Current Configuration</div>
+    <div style="font-size:13px;color:#cbd5e1;">Single product: <strong style="color:#fdba74;">SSC Unit</strong><br/>Bill of Materials is managed in the Production parts list.</div>
+  </div>
+  <div class="actions"><button class="btn btn-ghost" id="productsClose">Close</button></div>
+</div></div>
+
+<!-- ===== ANALYTICS DASHBOARD MODAL ===== -->
+<div class="modal-bg" id="analyticsModalBg"><div class="modal" style="max-width:780px;">
+  <h2>&#x1F4CA; Analytics Dashboard</h2>
+  <div class="analytics-grid" id="anKpis"></div>
+  <div class="chart-row">
+    <div class="chart-box"><h4>Stock Health</h4><canvas id="chartStatus" height="200"></canvas></div>
+    <div class="chart-box"><h4>Top 10 Parts by Inventory Value</h4><canvas id="chartValue" height="200"></canvas></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-box"><h4>Parts by Vendor</h4><canvas id="chartVendor" height="200"></canvas></div>
+    <div class="chart-box"><h4>Build Coverage (units each part supports)</h4><canvas id="chartCoverage" height="200"></canvas></div>
+  </div>
+  <div class="actions"><button class="btn btn-ghost" id="analyticsClose">Close</button></div>
+</div></div>
+
+<!-- ===== VENDOR MANAGEMENT MODAL ===== -->
+<div class="modal-bg" id="vendorsModalBg"><div class="modal" style="max-width:680px;">
+  <h2>&#x1F3ED; Vendor Management</h2>
+  <div id="vendorNotifBanner" class="notif-banner" style="display:none;"></div>
+  <div id="vendorListView">
+    <div id="vendorList" style="max-height:420px;overflow-y:auto;">
+      <div class="empty"><div class="big">&#x1F3ED;</div><div>Loading vendors...</div></div>
+    </div>
+  </div>
+  <div id="vendorDetailView" style="display:none;">
+    <button class="btn btn-ghost" id="vendorBack" style="margin-bottom:12px;padding:6px 12px;font-size:12px;">&#x2190; Back to Vendors</button>
+    <div id="vendorDetailContent"></div>
+  </div>
+  <div class="actions"><button class="btn btn-ghost" id="vendorsClose">Close</button></div>
+</div></div>
+
+<!-- ===== QR LABELS MODAL ===== -->
+<div class="modal-bg" id="qrModalBg"><div class="modal" style="max-width:580px;">
+  <h2>&#x1F3F7; Print QR Labels</h2>
+  <p style="font-size:12px;color:#94a3b8;margin:0 0 12px;">Select parts to include on the printed label sheet. Each label shows the part name, number, company, and a scannable QR code.</p>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+    <button class="btn btn-ghost" id="qrSelectAll" style="padding:5px 10px;font-size:12px;">Select All</button>
+    <button class="btn btn-ghost" id="qrSelectNone" style="padding:5px 10px;font-size:12px;">Clear</button>
+    <span id="qrSelectedCount" style="font-size:12px;color:#94a3b8;align-self:center;margin-left:4px;"></span>
+  </div>
+  <div id="qrPartList" style="max-height:340px;overflow-y:auto;border:1px solid #1f2937;border-radius:8px;padding:4px 10px;background:#0b1220;"></div>
+  <div class="actions" style="margin-top:14px;">
+    <button class="btn btn-ghost" id="qrClose">Close</button>
+    <button class="btn btn-primary" id="qrPrintBtn">&#x1F5A8; Print Labels</button>
+  </div>
+</div></div>
+
+<!-- ===== USER MANAGEMENT PLACEHOLDER ===== -->
+<div class="modal-bg" id="userMgmtModalBg"><div class="modal" style="max-width:480px;">
+  <h2>&#x1F465; User Management</h2>
+  <div style="background:#0f172a;border:1px dashed #334155;border-radius:10px;padding:22px;text-align:center;margin-bottom:14px;">
+    <div style="font-size:36px;margin-bottom:10px;">&#x1F511;</div>
+    <div style="font-weight:700;color:#fdba74;font-size:15px;margin-bottom:8px;">Available with Authentication Phase</div>
+    <div style="font-size:13px;color:#94a3b8;line-height:1.8;">User management will allow you to invite team members, assign roles, and control access to sensitive operations.<br/><br/>Planned roles: <strong style="color:#f1f5f9;">Admin</strong> (full access), <strong style="color:#f1f5f9;">Editor</strong> (stock + orders, no delete), <strong style="color:#f1f5f9;">Viewer</strong> (read-only).</div>
+  </div>
+  <div style="background:#111827;border:1px solid #1f2937;border-radius:8px;padding:12px;margin-bottom:14px;">
+    <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Current Access Model</div>
+    <div style="font-size:13px;color:#cbd5e1;">Single-user mode &mdash; all operations are unrestricted. Authentication phase will gate mutations to authenticated admins only.</div>
+  </div>
+  <div class="actions"><button class="btn btn-ghost" id="userMgmtClose">Close</button></div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -346,6 +649,12 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
+
+/* ========== OFFLINE PERSISTENCE ========== */
+db.enablePersistence({synchronizeTabs:true}).catch(function(e){
+  if(e.code==="failed-precondition"){console.warn("[Firestore] Persistence unavailable — multiple tabs open.");}
+  else if(e.code==="unimplemented"){console.warn("[Firestore] Persistence not supported in this browser.");}
+});
 
 /* ========== APP CHECK ========== */
 var appCheckReady = false;
@@ -464,14 +773,28 @@ var INITIAL_PARTS=[
 {id:"52",sn:52,name:"Konnect-It Marking Tag, 5x5mm, Numbered 1-10 (Pack of 500)",company:"Automation Direct",partNumber:"KN-L5-1-10",min:15,stock:0,unitPrice:32,mode:"production"}
 ];
 
-/* ========== STATE ========== */
-var parts=[],mode="production",statusFilter="all",searchTerm="",sortKey="sn",sortDir="asc",seeded=false;
-var html5QrcodeScanner=null;
-var importParsedRows=[];
+/* ========== STATE (Phase 5: centralized) ========== */
+var STATE = {
+  parts: [],
+  mode: "production",
+  statusFilter: "all",
+  searchTerm: "",
+  sortKey: "sn",
+  sortDir: "asc",
+  seeded: false,
+  html5QrcodeScanner: null,
+  importParsedRows: [],
+  /* chart instances — kept to allow proper destroy/recreate on modal reopen */
+  charts: {},
+  /* Configuration constants */
+  AUDIT_LOG_LIMIT: 200,
+  /* Notification localStorage key — increment suffix when schema changes */
+  NOTIF_KEY: "ssc_notified_v1"
+};
 
 /* ========== HELPERS ========== */
 function $(id){return document.getElementById(id);}
-function fmtMoney(n){if(!isFinite(n))return "$0.00";return "$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtMoney(n){if(!isFinite(n))return"$0.00";return"$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtDate(ts){
   if(!ts)return"--";
   var d=ts.toDate?ts.toDate():new Date(ts);
@@ -484,6 +807,11 @@ function showToast(msg,type){var t=$("toast");t.textContent=msg;t.className="toa
 function setSync(state,text){var dot=$("syncDot"),tx=$("syncText");if(dot)dot.className="dot "+(state||"");if(tx)tx.textContent=text;}
 function escapeHTML(s){return String(s).replace(/[&<>"']/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]);});}
 
+/* Online/offline indicator */
+window.addEventListener("online",function(){$("offlineBar").classList.remove("show");});
+window.addEventListener("offline",function(){$("offlineBar").classList.add("show");});
+if(!navigator.onLine){$("offlineBar").classList.add("show");}
+
 /* ========== FIRESTORE SYNC ========== */
 var unsubscribe=null;
 function initFirestoreSync(){
@@ -493,16 +821,17 @@ function initFirestoreSync(){
   unsubscribe=db.collection("parts").onSnapshot(
     function(snap){
       setSync("live","Live");
-      if(snap.empty&&!seeded){
-        seeded=true;setSync("","Seeding initial BOM...");
+      if(snap.empty&&!STATE.seeded){
+        STATE.seeded=true;setSync("","Seeding initial BOM...");
         var batch=db.batch();
         INITIAL_PARTS.forEach(function(p){batch.set(db.collection("parts").doc(p.id),p);});
         batch.commit().then(function(){showToast("Initial BOM seeded","success");}).catch(function(e){showToast("Seed failed: "+e.message,"error");console.error("[Seed]",e);});
         return;
       }
-      parts=snap.docs.map(function(d){var data=d.data();return{id:data.id||d.id,sn:+data.sn||parseInt(data.id,10)||0,name:data.name||"(unnamed)",company:data.company||"-",partNumber:data.partNumber||"-",min:+data.min||1,stock:+data.stock||0,unitPrice:+data.unitPrice||0,mode:data.mode||"production"};});
+      STATE.parts=snap.docs.map(function(d){var data=d.data();return{id:data.id||d.id,sn:+data.sn||parseInt(data.id,10)||0,name:data.name||"(unnamed)",company:data.company||"-",partNumber:data.partNumber||"-",min:+data.min||1,stock:+data.stock||0,unitPrice:+data.unitPrice||0,mode:data.mode||"production",imageUrl:data.imageUrl||""};});
       $("lastUpdate").textContent="Updated "+new Date().toLocaleTimeString();
       render();
+      checkAndNotifyLowStock();
     },
     function(err){console.error("[Firestore]",err);setSync("err","Offline / blocked: "+(err.code||err.message));showToast("Firestore: "+err.message,"error");}
   );
@@ -510,30 +839,29 @@ function initFirestoreSync(){
 
 /* ========== RENDER ========== */
 function render(){
-  var term=searchTerm.trim().toLowerCase();
-  var visible=parts.filter(function(p){
-    if(mode!=="all"&&p.mode!==mode)return false;
+  var term=STATE.searchTerm.trim().toLowerCase();
+  var visible=STATE.parts.filter(function(p){
+    if(STATE.mode!=="all"&&p.mode!==STATE.mode)return false;
     if(term){var blob=(p.name+" "+p.company+" "+p.partNumber).toLowerCase();if(!blob.includes(term))return false;}
     var st=statusOf(p);
-    if(statusFilter!=="all"&&st!==statusFilter&&!(statusFilter==="low"&&st==="warn"))return false;
+    if(STATE.statusFilter!=="all"&&st!==STATE.statusFilter&&!(STATE.statusFilter==="low"&&st==="warn"))return false;
     return true;
   });
-  var inMode=parts.filter(function(p){return mode==="all"||p.mode===mode;});
+  var inMode=STATE.parts.filter(function(p){return STATE.mode==="all"||p.mode===STATE.mode;});
   var cAll=inMode.length,cOut=0,cLow=0,cOk=0;
   inMode.forEach(function(p){var s=statusOf(p);if(s==="out")cOut++;else if(s==="low"||s==="warn")cLow++;else cOk++;});
   $("cAll").textContent=cAll;$("cOut").textContent=cOut;$("cLow").textContent=cLow;$("cOk").textContent=cOk;
 
-  var prod=parts.filter(function(p){return p.mode==="production";});
+  var prod=STATE.parts.filter(function(p){return p.mode==="production";});
   var buildCap=prod.length?Math.min.apply(null,prod.map(function(p){return Math.floor(p.stock/Math.max(1,p.min));})):0;
   var bottlenecks=prod.filter(function(p){return Math.floor(p.stock/Math.max(1,p.min))===buildCap;}).slice(0,3).map(function(p){return p.name.length>28?p.name.slice(0,28)+"...":p.name;});
   $("kpiBuild").textContent=buildCap;
   $("kpiBottleneck").textContent=buildCap>0?"Bottleneck: "+bottlenecks.join(", "):(bottlenecks.length?"Blocked by: "+bottlenecks.join(", "):"-");
-  $("kpiTotal").textContent=parts.length;
+  $("kpiTotal").textContent=STATE.parts.length;
   $("kpiVisible").textContent=visible.length+" shown";
-  var lowAll=parts.filter(function(p){var s=statusOf(p);return s==="out"||s==="low";}).length;
+  var lowAll=STATE.parts.filter(function(p){var s=statusOf(p);return s==="out"||s==="low";}).length;
   $("kpiLow").textContent=lowAll;
-  /* FIX: was "p.stock  p.unitPrice" - restored * operator */
-  var totalValue=parts.reduce(function(sum,p){return sum+(p.stock*p.unitPrice);},0);
+  var totalValue=STATE.parts.reduce(function(sum,p){return sum+(p.stock*p.unitPrice);},0);
   $("kpiValue").textContent=fmtMoney(totalValue);
   $("buildBtn").disabled=buildCap<=0;
 
@@ -542,59 +870,78 @@ function render(){
   if(lowAll>0){$("lowAlertCount").textContent=lowAll;alertEl.style.display="inline-flex";}
   else{alertEl.style.display="none";}
 
-  var dir=sortDir==="asc"?1:-1;
+  var dir=STATE.sortDir==="asc"?1:-1;
   var sorted=visible.slice().sort(function(a,b){
     var av,bv;
-    if(sortKey==="status"){av=statusOf(a);bv=statusOf(b);}
-    /* FIX: was "a.stock  a.unitPrice" - restored * operator */
-    else if(sortKey==="lineValue"){av=a.stock*a.unitPrice;bv=b.stock*b.unitPrice;}
-    else{av=a[sortKey];bv=b[sortKey];}
-    /* FIX: was "av.localeCompare(bv)  dir" - restored * operator */
+    if(STATE.sortKey==="status"){av=statusOf(a);bv=statusOf(b);}
+    else if(STATE.sortKey==="lineValue"){av=a.stock*a.unitPrice;bv=b.stock*b.unitPrice;}
+    else{av=a[STATE.sortKey];bv=b[STATE.sortKey];}
     if(typeof av==="string")return av.localeCompare(bv)*dir;
-    /* FIX: was "((av||0)-(bv||0))  dir" - restored * operator */
     return((av||0)-(bv||0))*dir;
   });
 
-  document.querySelectorAll("thead th").forEach(function(th){th.classList.remove("sorted","asc");if(th.dataset.sort===sortKey){th.classList.add("sorted");if(sortDir==="asc")th.classList.add("asc");}});
+  document.querySelectorAll("thead th").forEach(function(th){th.classList.remove("sorted","asc");if(th.dataset.sort===STATE.sortKey){th.classList.add("sorted");if(STATE.sortDir==="asc")th.classList.add("asc");}});
   var tbody=$("tbody");tbody.innerHTML="";
   var mlist=$("mobileList");mlist.innerHTML="";
   $("emptyState").style.display=sorted.length===0?"block":"none";
 
   sorted.forEach(function(p){
     var s=statusOf(p);
-    /* FIX: was "p.stock  p.unitPrice" - restored * operator */
     var lineVal=p.stock*p.unitPrice;
+    var imgHtml=p.imageUrl
+      ?'<img class="part-thumb" src="'+escapeHTML(p.imageUrl)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'" />'
+      :'<span class="part-thumb-placeholder" aria-hidden="true">&#x1F4E6;</span>';
     var tr=document.createElement("tr");
     tr.className="row-"+s;
     tr.dataset.partid=p.id;
-    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td>';
+    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td style="width:44px;text-align:center;">'+imgHtml+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td><td class="actions">'+(p.mode==="spare"?'<button class="btn-row-move" data-id="'+p.id+'" title="Move to Production" aria-label="Move to Production">&#x2197; Prod<\/button> ':'' )+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button> <button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/td>';
     tbody.appendChild(tr);
 
     var card=document.createElement("div");card.className="mobile-card";card.dataset.partid=p.id;
-    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div><\/div>';
+    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div>'+(p.mode==="spare"?'<button class="btn-row-move" data-id="'+p.id+'" title="Move to Production" aria-label="Move to Production">&#x2197;<\/button>':'')+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button><button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/div><\/div>';
     mlist.appendChild(card);
   });
 
-  document.querySelectorAll('.stock-ctrl button').forEach(function(btn){btn.addEventListener("click",function(){var id=btn.dataset.id,act=btn.dataset.act;var p=parts.find(function(x){return x.id===id;});if(!p)return;var next=act==="inc"?p.stock+1:Math.max(0,p.stock-1);updateStock(id,next);});});
-  document.querySelectorAll('.stock-ctrl input').forEach(function(inp){inp.addEventListener("change",function(){var id=inp.dataset.id;var v=Math.max(0,parseInt(inp.value,10)||0);updateStock(id,v);});});
+  document.querySelectorAll('.stock-ctrl button').forEach(function(btn){btn.addEventListener("click",function(){var id=btn.dataset.id,act=btn.dataset.act;var p=STATE.parts.find(function(x){return x.id===id;});if(!p)return;var next=act==="inc"?p.stock+1:Math.max(0,p.stock-1);promptStockChange(id,next);});});
+  document.querySelectorAll('.stock-ctrl input').forEach(function(inp){inp.addEventListener("change",function(){var id=inp.dataset.id;var v=Math.max(0,parseInt(inp.value,10)||0);promptStockChange(id,v);});});
 }
 
 /* ========== ACTIONS ========== */
 function updateStock(id,value){db.collection("parts").doc(id).update({stock:value}).catch(function(e){showToast("Update failed: "+e.message,"error");});}
 
 function buildOneSSC(){
-  var prod=parts.filter(function(p){return p.mode==="production";});
+  var prod=STATE.parts.filter(function(p){return p.mode==="production";});
   var cap=prod.length?Math.min.apply(null,prod.map(function(p){return Math.floor(p.stock/Math.max(1,p.min));})):0;
   if(cap<=0){showToast("Insufficient parts to build","error");return;}
-  if(!confirm("Build 1 SSC unit?\n\nThis will deduct the per-SSC quantity from "+prod.length+" parts."))return;
+  $("buildInfo").innerHTML='<strong>'+prod.length+' production parts</strong> will be decremented.<br/>Current build capacity: <strong>'+cap+' SSC</strong>.';
+  $("buildPO").value="";
+  $("buildJob").value="";
+  $("buildModalBg").classList.add("show");
+  $("buildPO").focus();
+}
+
+function executeBuild(){
+  var poNumber=$("buildPO").value.trim();
+  var jobNumber=$("buildJob").value.trim();
+  if(!poNumber){showToast("PO Number is required","error");$("buildPO").focus();return;}
+  if(!jobNumber){showToast("Job Number is required","error");$("buildJob").focus();return;}
+  $("buildModalBg").classList.remove("show");
+  var prod=STATE.parts.filter(function(p){return p.mode==="production";});
+  var cap=prod.length?Math.min.apply(null,prod.map(function(p){return Math.floor(p.stock/Math.max(1,p.min));})):0;
+  if(cap<=0){showToast("Insufficient parts to build","error");return;}
   var batch=db.batch();
   prod.forEach(function(p){batch.update(db.collection("parts").doc(p.id),{stock:Math.max(0,p.stock-p.min)});});
-  /* Log to build history */
+  prod.forEach(function(p){
+    var auditRef=db.collection("auditLog").doc();
+    batch.set(auditRef,{id:auditRef.id,partId:p.id,partName:p.name,partNumber:p.partNumber,oldStock:p.stock,newStock:Math.max(0,p.stock-p.min),delta:-p.min,reason:"Used in build",notes:"SSC build",poNumber:poNumber,jobNumber:jobNumber,changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+  });
   var histRef=db.collection("buildHistory").doc();
   batch.set(histRef,{
     id:histRef.id,
     timestamp:firebase.firestore.FieldValue.serverTimestamp(),
     builtBy:currentUser?currentUser.email:"unknown",
+    poNumber:poNumber,
+    jobNumber:jobNumber,
     partsUsed:prod.map(function(p){return{id:p.id,name:p.name,partNumber:p.partNumber,qty:p.min};}),
     partCount:prod.length
   });
@@ -633,7 +980,7 @@ function loadBuildHistory(){
           partsHtml=d.partsUsed.slice(0,5).map(function(p){return escapeHTML(p.name)+" (\u00d7"+p.qty+")"}).join("<br/>");
           if(d.partsUsed.length>5)partsHtml+="<br/>\u2026and "+(d.partsUsed.length-5)+" more parts";
         }
-        html+='<div class="history-item"><div class="hist-header"><span style="font-weight:700;color:#fdba74;">1 SSC Built<\/span><span class="hist-time">'+escapeHTML(ts)+'<\/span><\/div><div class="hist-user">By: '+escapeHTML(d.builtBy||"unknown")+'<\/div>'+(partsHtml?'<div class="hist-parts">'+partsHtml+'<\/div>':'')+'<\/div>';
+        html+='<div class="history-item"><div class="hist-header"><span style="font-weight:700;color:#fdba74;">1 SSC Built<\/span><span class="hist-time">'+escapeHTML(ts)+'<\/span><\/div><div class="hist-user">By: '+escapeHTML(d.builtBy||"unknown")+' \u00b7 PO: <strong>'+escapeHTML(d.poNumber||"-")+'<\/strong> \u00b7 Job: <strong>'+escapeHTML(d.jobNumber||"-")+'<\/strong><\/div>'+(partsHtml?'<div class="hist-parts">'+partsHtml+'<\/div>':'')+'<\/div>';
       });
       container.innerHTML=html;
     })
@@ -661,7 +1008,7 @@ function switchPOTab(tab){
 function populatePOPartSelect(){
   var sel=$("poPartSelect");
   sel.innerHTML="";
-  parts.slice().sort(function(a,b){return a.sn-b.sn;}).forEach(function(p){
+  STATE.parts.slice().sort(function(a,b){return a.sn-b.sn;}).forEach(function(p){
     var opt=document.createElement("option");
     opt.value=p.id;
     opt.textContent="#"+p.sn+" - "+(p.name.length>48?p.name.slice(0,48)+"\u2026":p.name)+" ("+p.partNumber+")";
@@ -689,13 +1036,15 @@ function loadPOs(){
         item.dataset.partid=d.partId||"";
         item.dataset.qty=d.qty||0;
         item.dataset.status=st;
+        item.dataset.pono=d.poNumber||"";
+        item.dataset.jobno=d.jobNumber||"";
         var actionsHtml="";
         if(userRole==="admin"){
           if(st==="pending")actionsHtml+='<button class="btn btn-ghost po-action" style="padding:4px 10px;font-size:11px;" data-action="order">Mark Ordered<\/button>';
           if(st==="ordered")actionsHtml+='<button class="btn btn-success po-action" style="padding:4px 10px;font-size:11px;" data-action="receive">Mark Received (+stock)<\/button>';
           if(st!=="received")actionsHtml+='<button class="btn btn-danger po-action" style="padding:4px 10px;font-size:11px;" data-action="delete">Delete<\/button>';
         }
-        item.innerHTML='<div class="po-header"><div class="po-name">'+escapeHTML(d.partName||"-")+'<\/div><span class="badge '+escapeHTML(st)+'">'+escapeHTML(st)+'<\/span><\/div><div class="po-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 Qty: <strong>'+d.qty+'<\/strong> \u00b7 '+escapeHTML(ts)+'<\/div>'+(d.notes?'<div class="po-meta">'+escapeHTML(d.notes)+'<\/div>':'')+'<div class="po-actions">'+actionsHtml+'<\/div>';
+        item.innerHTML='<div class="po-header"><div class="po-name">'+escapeHTML(d.partName||"-")+'<\/div><span class="badge '+escapeHTML(st)+'">'+escapeHTML(st)+'<\/span><\/div><div class="po-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 Qty: <strong>'+d.qty+'<\/strong> \u00b7 '+escapeHTML(ts)+'<\/div><div class="po-meta">PO Ref: <strong>'+escapeHTML(d.poNumber||"-")+'<\/strong> \u00b7 Job: <strong>'+escapeHTML(d.jobNumber||"-")+'<\/strong><\/div>'+(d.notes?'<div class="po-meta">'+escapeHTML(d.notes)+'<\/div>':'')+'<div class="po-actions">'+actionsHtml+'<\/div>';
         container.appendChild(item);
       });
     })
@@ -706,9 +1055,13 @@ function createPO(){
   var partId=$("poPartSelect").value;
   var qty=parseInt($("poQty").value,10)||1;
   var notes=$("poNotes").value.trim();
-  var part=parts.find(function(p){return p.id===partId;});
+  var poRef=$("poPONumber").value.trim();
+  var jobRef=$("poJobNumber").value.trim();
+  var part=STATE.parts.find(function(p){return p.id===partId;});
   if(!part){showToast("Select a part","error");return;}
   if(qty<1){showToast("Qty must be at least 1","error");return;}
+  if(!poRef){showToast("PO Reference # is required","error");$("poPONumber").focus();return;}
+  if(!jobRef){showToast("Job Number is required","error");$("poJobNumber").focus();return;}
   var ref=db.collection("purchaseOrders").doc();
   ref.set({
     id:ref.id,
@@ -716,6 +1069,8 @@ function createPO(){
     partName:part.name,
     partNumber:part.partNumber,
     qty:qty,
+    poNumber:poRef,
+    jobNumber:jobRef,
     status:"pending",
     notes:notes,
     createdAt:firebase.firestore.FieldValue.serverTimestamp(),
@@ -723,7 +1078,7 @@ function createPO(){
     createdBy:currentUser?currentUser.email:"unknown"
   }).then(function(){
     showToast("Purchase order created","success");
-    $("poQty").value=1;$("poNotes").value="";
+    $("poQty").value=1;$("poNotes").value="";$("poPONumber").value="";$("poJobNumber").value="";
     switchPOTab("list");loadPOs();
   }).catch(function(e){showToast("Failed: "+e.message,"error");});
 }
@@ -734,12 +1089,16 @@ function updatePOStatus(id,status){
     .catch(function(e){showToast("Failed: "+e.message,"error");});
 }
 
-function receivePO(id,partId,qty){
+function receivePO(id,partId,qty,poNumber,jobNumber){
   if(!confirm("Mark order as Received and add "+qty+" unit(s) to stock?"))return;
-  var part=parts.find(function(p){return p.id===partId;});
+  var part=STATE.parts.find(function(p){return p.id===partId;});
   var batch=db.batch();
   batch.update(db.collection("purchaseOrders").doc(id),{status:"received",updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-  if(part)batch.update(db.collection("parts").doc(partId),{stock:part.stock+qty});
+  if(part){
+    batch.update(db.collection("parts").doc(partId),{stock:part.stock+qty});
+    var recAuditRef=db.collection("auditLog").doc();
+    batch.set(recAuditRef,{id:recAuditRef.id,partId:partId,partName:part.name,partNumber:part.partNumber,oldStock:part.stock,newStock:part.stock+qty,delta:qty,reason:"Received shipment",notes:"Purchase order received",poNumber:poNumber||"",jobNumber:jobNumber||"",changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+  }
   batch.commit()
     .then(function(){showToast("Order received \u2014 stock updated","success");loadPOs();})
     .catch(function(e){showToast("Failed: "+e.message,"error");});
@@ -752,12 +1111,299 @@ function deletePO(id){
     .catch(function(e){showToast("Failed: "+e.message,"error");});
 }
 
+/* ========== AUDIT LOG ========== */
+function logAudit(partId,partName,partNumber,oldStock,newStock,reason,notes,poNumber,jobNumber,batch){
+  var delta=newStock-oldStock;
+  var ref=db.collection("auditLog").doc();
+  var entry={id:ref.id,partId:partId,partName:partName,partNumber:partNumber,oldStock:oldStock,newStock:newStock,delta:delta,reason:reason||"",notes:notes||"",poNumber:poNumber||"",jobNumber:jobNumber||"",changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()};
+  if(batch){batch.set(ref,entry);}
+  else{ref.set(entry).catch(function(e){console.error("[Audit]",e);});}
+}
+
+var pendingStockChange=null;
+function promptStockChange(id,newValue){
+  var p=STATE.parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  if(p.stock===newValue)return;
+  pendingStockChange={id:id,oldStock:p.stock,newStock:newValue,partName:p.name,partNumber:p.partNumber};
+  var delta=newValue-p.stock;
+  $("reasonPartInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Stock: <strong>'+p.stock+'<\/strong> → <strong>'+newValue+'<\/strong> ('+(delta>0?'+':'')+delta+')';
+  $("reasonSelect").value=delta>0?"Received shipment":"Used in build";
+  $("reasonNotes").value="";
+  $("reasonPO").value="";
+  $("reasonJob").value="";
+  $("reasonModalBg").classList.add("show");
+  $("reasonPO").focus();
+}
+
+function confirmStockChange(){
+  if(!pendingStockChange)return;
+  var reason=$("reasonSelect").value;
+  var notes=$("reasonNotes").value.trim();
+  var poNumber=$("reasonPO").value.trim();
+  var jobNumber=$("reasonJob").value.trim();
+  if(!poNumber){showToast("PO Number is required","error");$("reasonPO").focus();return;}
+  if(!jobNumber){showToast("Job Number is required","error");$("reasonJob").focus();return;}
+  var sc=pendingStockChange;
+  pendingStockChange=null;
+  $("reasonModalBg").classList.remove("show");
+  db.collection("parts").doc(sc.id).update({stock:sc.newStock})
+    .then(function(){logAudit(sc.id,sc.partName,sc.partNumber,sc.oldStock,sc.newStock,reason,notes,poNumber,jobNumber);showToast("Stock updated","success");})
+    .catch(function(e){showToast("Update failed: "+e.message,"error");});
+}
+
+function openAuditModal(){
+  $("auditModalBg").classList.add("show");
+  $("auditSearch").value="";
+  loadAuditLog("");
+}
+
+function loadAuditLog(filter){
+  var container=$("auditList");
+  container.innerHTML='<div style="color:#64748b;font-size:13px;padding:20px;">Loading...<\/div>';
+  db.collection("auditLog").orderBy("timestamp","desc").limit(STATE.AUDIT_LOG_LIMIT).get()
+    .then(function(snap){
+      if(snap.empty){container.innerHTML='<div class="empty"><div class="big">&#x1F4CB;<\/div><div>No audit entries yet.<\/div><\/div>';return;}
+      var docs=[];
+      snap.forEach(function(doc){docs.push(doc.data());});
+      var term=(filter||"").trim().toLowerCase();
+      function matchesAuditFilter(d){
+        if(!term)return true;
+        return (d.partName||"").toLowerCase().includes(term)
+          ||(d.reason||"").toLowerCase().includes(term)
+          ||(d.notes||"").toLowerCase().includes(term)
+          ||(d.partNumber||"").toLowerCase().includes(term)
+          ||(d.poNumber||"").toLowerCase().includes(term)
+          ||(d.jobNumber||"").toLowerCase().includes(term);
+      }
+      if(term)docs=docs.filter(matchesAuditFilter);
+      if(!docs.length){container.innerHTML='<div class="empty"><div class="big">&#x1F50D;<\/div><div>No entries match your filter.<\/div><\/div>';return;}
+      var html="";
+      docs.forEach(function(d){
+        var delta=+d.delta||0;
+        var dClass=delta>0?"pos":delta<0?"neg":"neu";
+        var dStr=(delta>0?"+":"")+delta;
+        var ts=fmtDate(d.timestamp);
+        html+='<div class="audit-item"><div class="audit-header"><span class="audit-part">'+escapeHTML(d.partName||"-")+'<\/span><span class="audit-time">'+escapeHTML(ts)+'<\/span><\/div><div class="audit-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 By: '+escapeHTML(d.changedBy||"system")+(d.poNumber?' \u00b7 PO: <strong>'+escapeHTML(d.poNumber)+'<\/strong>':'')+(d.jobNumber?' \u00b7 Job: <strong>'+escapeHTML(d.jobNumber)+'<\/strong>':'')+'<\/div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;"><span class="audit-delta '+dClass+'">'+d.oldStock+' → '+d.newStock+' ('+dStr+')<\/span><span class="audit-reason">'+escapeHTML(d.reason||"")+'<\/span><\/div>'+(d.notes?'<div style="font-size:11px;color:#64748b;margin-top:3px;">'+escapeHTML(d.notes)+'<\/div>':'')+'<\/div>';
+      });
+      container.innerHTML=html;
+    })
+    .catch(function(e){container.innerHTML='<div style="color:#f87171;padding:16px;">Failed to load: '+escapeHTML(e.message)+'<\/div>';});
+}
+
+/* ========== INLINE EDIT & DELETE ========== */
+function openEditModal(id){
+  var p=STATE.parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  $("editPartId").value=p.id;
+  $("editName").value=p.name;
+  $("editCompany").value=p.company;
+  $("editPN").value=p.partNumber;
+  $("editMin").value=p.min;
+  $("editPrice").value=p.unitPrice;
+  $("editMode").value=p.mode||"production";
+  $("editImageUrl").value=p.imageUrl||"";
+  $("editModalBg").classList.add("show");
+  $("editName").focus();
+}
+
+function saveEditPart(){
+  var id=$("editPartId").value;
+  var name=$("editName").value.trim();
+  var min=parseInt($("editMin").value,10);
+  if(!name){showToast("Description is required","error");return;}
+  if(!min||min<1){showToast("Qty must be >= 1","error");return;}
+  db.collection("parts").doc(id).update({
+    name:name,
+    company:$("editCompany").value.trim()||"-",
+    partNumber:$("editPN").value.trim()||"-",
+    min:min,
+    unitPrice:parseFloat($("editPrice").value)||0,
+    mode:$("editMode").value,
+    imageUrl:$("editImageUrl").value.trim()||""
+  }).then(function(){$("editModalBg").classList.remove("show");showToast("Part updated","success");})
+    .catch(function(e){showToast("Update failed: "+e.message,"error");});
+}
+
+function openDeleteModal(id){
+  var p=STATE.parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  $("deletePartId").value=p.id;
+  $("deletePartInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Part #: '+escapeHTML(p.partNumber)+' \u00b7 Current stock: <strong>'+p.stock+'<\/strong>';
+  $("deleteReason").value="Obsolete";
+  $("deletePO").value="";
+  $("deleteJob").value="";
+  $("deleteNotes").value="";
+  $("deleteModalBg").classList.add("show");
+  $("deletePO").focus();
+}
+
+function executeDeletePart(){
+  var id=$("deletePartId").value;
+  var reason=$("deleteReason").value;
+  var poNumber=$("deletePO").value.trim();
+  var jobNumber=$("deleteJob").value.trim();
+  var notes=$("deleteNotes").value.trim();
+  if(!poNumber){showToast("PO Number is required","error");$("deletePO").focus();return;}
+  if(!jobNumber){showToast("Job Number is required","error");$("deleteJob").focus();return;}
+  var p=STATE.parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  $("deleteModalBg").classList.remove("show");
+  var batch=db.batch();
+  batch.delete(db.collection("parts").doc(id));
+  var auditRef=db.collection("auditLog").doc();
+  batch.set(auditRef,{id:auditRef.id,partId:id,partName:p.name,partNumber:p.partNumber,oldStock:p.stock,newStock:0,delta:-p.stock,reason:"Part Removed: "+reason,notes:notes||"",poNumber:poNumber,jobNumber:jobNumber,changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+  batch.commit()
+    .then(function(){showToast("Part removed and audit logged","success");})
+    .catch(function(e){showToast("Delete failed: "+e.message,"error");});
+}
+
+/* ========== SPARE TO PRODUCTION ========== */
+function moveToProduction(id){
+  var p=STATE.parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  $("spareToProPartId").value=p.id;
+  $("spareToProInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Part #: '+escapeHTML(p.partNumber)+' \u00b7 Current stock: <strong>'+p.stock+'<\/strong> units<br\/><span style="color:#94a3b8;font-size:11px;">This part will be reclassified from <em>Spare<\/em> to <em>Production<\/em> inventory.<\/span>';
+  $("spareToPoPO").value="";
+  $("spareToProJob").value="";
+  $("spareToProNotes").value="";
+  $("spareToProModalBg").classList.add("show");
+  $("spareToPoPO").focus();
+}
+
+function executeSpareToProduction(){
+  var id=$("spareToProPartId").value;
+  var poNumber=$("spareToPoPO").value.trim();
+  var jobNumber=$("spareToProJob").value.trim();
+  var notes=$("spareToProNotes").value.trim();
+  if(!poNumber){showToast("PO Number is required","error");$("spareToPoPO").focus();return;}
+  if(!jobNumber){showToast("Job Number is required","error");$("spareToProJob").focus();return;}
+  var p=STATE.parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  $("spareToProModalBg").classList.remove("show");
+  db.collection("parts").doc(id).update({mode:"production"})
+    .then(function(){
+      logAudit(id,p.name,p.partNumber,p.stock,p.stock,"Moved to Production",notes||"Transferred from spare to production inventory",poNumber,jobNumber);
+      showToast("Part moved to Production","success");
+    })
+    .catch(function(e){showToast("Failed: "+e.message,"error");});
+}
+
+/* ========== EXPORT ========== */
+function downloadCSV(filename,rows){
+  var content=rows.map(function(r){
+    return r.map(function(v){
+      var s=String(v==null?"":v);
+      if(/[,"\n\r]/.test(s))s='"'+s.replace(/"/g,'""')+'"';
+      return s;
+    }).join(",");
+  }).join("\r\n");
+  /* Prefix UTF-8 BOM so Excel opens the file with correct encoding automatically */
+  var blob=new Blob(["\uFEFF"+content],{type:"text/csv;charset=utf-8;"});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement("a");
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+}
+
+function exportInventoryCSV(all){
+  var header=["SN","Description","Company","Part Number","Req/SSC","Stock","Status","Unit Price ($)","Line Value ($)","Mode","Image URL"];
+  var term=STATE.searchTerm.trim().toLowerCase();
+  var data=all?STATE.parts.slice():STATE.parts.filter(function(p){
+    if(STATE.mode!=="all"&&p.mode!==STATE.mode)return false;
+    if(term){var blob=(p.name+" "+p.company+" "+p.partNumber).toLowerCase();if(!blob.includes(term))return false;}
+    var st=statusOf(p);
+    if(STATE.statusFilter!=="all"&&st!==STATE.statusFilter&&!(STATE.statusFilter==="low"&&st==="warn"))return false;
+    return true;
+  });
+  var rows=[header].concat(data.map(function(p){
+    return[p.sn,p.name,p.company,p.partNumber,p.min,p.stock,statusLabel(statusOf(p)),p.unitPrice.toFixed(2),(p.stock*p.unitPrice).toFixed(2),p.mode,p.imageUrl||""];
+  }));
+  downloadCSV(all?"inventory_full.csv":"inventory_filtered.csv",rows);
+  showToast("Inventory exported ("+data.length+" parts)","success");
+}
+
+function exportAuditCSV(){
+  showToast("Preparing audit log\u2026");
+  db.collection("auditLog").orderBy("timestamp","desc").limit(500).get()
+    .then(function(snap){
+      var header=["Timestamp","Part Name","Part Number","Changed By","Old Stock","New Stock","Delta","Reason","Notes","PO Number","Job Number"];
+      var rows=[header];
+      snap.forEach(function(doc){
+        var d=doc.data();
+        rows.push([fmtDate(d.timestamp),d.partName||"",d.partNumber||"",d.changedBy||"",d.oldStock||0,d.newStock||0,d.delta||0,d.reason||"",d.notes||"",d.poNumber||"",d.jobNumber||""]);
+      });
+      downloadCSV("audit_log.csv",rows);
+      showToast("Audit log exported ("+snap.size+" entries)","success");
+    })
+    .catch(function(e){showToast("Export failed: "+e.message,"error");});
+}
+
+function exportBuildsCSV(){
+  showToast("Preparing build history\u2026");
+  db.collection("buildHistory").orderBy("timestamp","desc").limit(500).get()
+    .then(function(snap){
+      var header=["Timestamp","Built By","PO Number","Job Number","Part Count"];
+      var rows=[header];
+      snap.forEach(function(doc){
+        var d=doc.data();
+        rows.push([fmtDate(d.timestamp),d.builtBy||"",d.poNumber||"",d.jobNumber||"",d.partCount||0]);
+      });
+      downloadCSV("build_history.csv",rows);
+      showToast("Build history exported ("+snap.size+" entries)","success");
+    })
+    .catch(function(e){showToast("Export failed: "+e.message,"error");});
+}
+
+/* ========== REORDER SUGGESTIONS ========== */
+function openReorderModal(){
+  $("reorderModalBg").classList.add("show");
+  loadReorderSuggestions();
+}
+
+function loadReorderSuggestions(){
+  var container=$("reorderList");
+  var orderMap={out:0,low:1,warn:2};
+  var lowParts=STATE.parts.filter(function(p){var s=statusOf(p);return s==="out"||s==="low"||s==="warn";})
+    .slice().sort(function(a,b){return(orderMap[statusOf(a)]||3)-(orderMap[statusOf(b)]||3);});
+  if(!lowParts.length){
+    container.innerHTML='<div class="empty"><div class="big">&#x2705;<\/div><div>All parts are sufficiently stocked.<\/div><\/div>';
+    return;
+  }
+  var html='<div style="font-size:12px;color:#64748b;margin-bottom:10px;">'+lowParts.length+' part(s) need attention<\/div>';
+  lowParts.forEach(function(p){
+    var s=statusOf(p);
+    var shortfall=Math.max(0,p.min-p.stock);
+    var suggested=Math.max(p.min,shortfall+p.min); /* order enough to cover shortfall + 1 full build */
+    html+='<div class="reorder-item"><div style="flex:1;min-width:0;">'
+      +'<div class="ri-name">'+escapeHTML(p.name)+'<\/div>'
+      +'<div class="ri-meta">Part #: '+escapeHTML(p.partNumber)+' \u00b7 '+escapeHTML(p.company)+'<\/div>'
+      +'<div class="ri-meta">Stock: <strong>'+p.stock+'<\/strong> \u00b7 Required/SSC: <strong>'+p.min+'<\/strong>'+(shortfall>0?' \u00b7 Shortfall: <strong style="color:#f87171;">'+shortfall+'<\/strong>':'')
+      +' \u00b7 Suggested order qty: <strong style="color:#4ade80;">'+suggested+'<\/strong><\/div>'
+      +'<\/div>'
+      +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">'
+      +'<span class="badge '+s+'">'+statusLabel(s)+'<\/span>'
+      +(userRole==="admin"?'<button class="btn btn-ghost ri-po-btn" data-partid="'+p.id+'" style="padding:4px 10px;font-size:11px;white-space:nowrap;">+ Create PO<\/button>':'')
+      +'<\/div><\/div>';
+  });
+  container.innerHTML=html;
+}
+
+/* ========== PRODUCTS / MULTI-BOM PLACEHOLDER ========== */
+/* TODO (future phase): Replace placeholder with full multi-product BOM support.
+   Each product will have its own BOM referencing shared parts collection.
+   Build capacity and stock deduction will be per-product. */
+function openProductsModal(){
+  $("productsModalBg").classList.add("show");
+}
+
 /* ========== CSV IMPORT ========== */
 function openImportModal(){
   $("importFilePicker").value="";
   $("importPreview").textContent="";
   $("importConfirm").disabled=true;
-  importParsedRows=[];
+  STATE.importParsedRows=[];
   $("importModalBg").classList.add("show");
 }
 
@@ -769,7 +1415,7 @@ function handleImportFile(file){
     header:true,
     skipEmptyLines:true,
     complete:function(res){
-      importParsedRows=[];
+      STATE.importParsedRows=[];
       var errors=[];
       /* Build a safe, lowercase key lookup from the first row */
       var safeKeys={};
@@ -795,7 +1441,7 @@ function handleImportFile(file){
         var priceStr=getCol(["unit price","unit$","price","unit cost","cost"]);
         var modeStr=getCol(["mode","type"]);
         if(!name){errors.push("Row "+(i+2)+": missing Description");return;}
-        importParsedRows.push({
+        STATE.importParsedRows.push({
           name:name,
           company:company||"-",
           partNumber:partNumber||"-",
@@ -806,25 +1452,25 @@ function handleImportFile(file){
         });
       });
       var msg="";
-      if(importParsedRows.length>0)msg=importParsedRows.length+" row(s) ready to import.";
+      if(STATE.importParsedRows.length>0)msg=STATE.importParsedRows.length+" row(s) ready to import.";
       if(errors.length>0)msg+=(msg?" ":"")+errors.slice(0,3).join("; ")+(errors.length>3?" (+"+(errors.length-3)+" more)":"");
       $("importPreview").textContent=msg||"No valid rows found.";
-      $("importConfirm").disabled=importParsedRows.length===0;
+      $("importConfirm").disabled=STATE.importParsedRows.length===0;
     },
     error:function(e){$("importPreview").textContent="Parse error: "+e.message;$("importConfirm").disabled=true;}
   });
 }
 
 function doImport(){
-  if(!importParsedRows.length)return;
+  if(!STATE.importParsedRows.length)return;
   $("importConfirm").disabled=true;
-  var maxSn=parts.reduce(function(m,p){return Math.max(m,+p.sn||0);},0);
+  var maxSn=STATE.parts.reduce(function(m,p){return Math.max(m,+p.sn||0);},0);
   /* Build a part-number index for O(1) lookup during import */
   var partIndex={};
-  parts.forEach(function(p){if(p.partNumber&&p.partNumber!=="-")partIndex[p.partNumber.toLowerCase()]=p;});
+  STATE.parts.forEach(function(p){if(p.partNumber&&p.partNumber!=="-")partIndex[p.partNumber.toLowerCase()]=p;});
   var batch=db.batch();
   var added=0,updated=0;
-  importParsedRows.forEach(function(row){
+  STATE.importParsedRows.forEach(function(row){
     var existing=row.partNumber!=="-"?partIndex[row.partNumber.toLowerCase()]:null;
     if(existing){
       batch.update(db.collection("parts").doc(existing.id),{name:row.name,company:row.company,min:row.min,stock:row.stock,unitPrice:row.unitPrice,mode:row.mode});
@@ -840,7 +1486,6 @@ function doImport(){
     .catch(function(e){showToast("Import failed: "+e.message,"error");$("importConfirm").disabled=false;});
 }
 
-/* ========== BARCODE SCAN ========== */
 function openScanModal(){
   $("scanModalBg").classList.add("show");
   $("scanResultBox").style.display="none";
@@ -849,9 +1494,9 @@ function openScanModal(){
 }
 
 function startScanner(){
-  if(html5QrcodeScanner)return;
-  html5QrcodeScanner=new Html5Qrcode("scanReader");
-  html5QrcodeScanner.start(
+  if(STATE.html5QrcodeScanner)return;
+  STATE.html5QrcodeScanner=new Html5Qrcode("scanReader");
+  STATE.html5QrcodeScanner.start(
     {facingMode:"environment"},
     {fps:10,qrbox:{width:250,height:150}},
     function(decodedText){ handleScanResult(decodedText); },
@@ -863,17 +1508,17 @@ function startScanner(){
 }
 
 function stopScanner(){
-  if(html5QrcodeScanner){
-    html5QrcodeScanner.stop().catch(function(){}).finally(function(){
-      try{html5QrcodeScanner.clear();}catch(e){}
-      html5QrcodeScanner=null;
+  if(STATE.html5QrcodeScanner){
+    STATE.html5QrcodeScanner.stop().catch(function(){}).finally(function(){
+      try{STATE.html5QrcodeScanner.clear();}catch(e){}
+      STATE.html5QrcodeScanner=null;
       $("scanReader").innerHTML="";
     });
   }
 }
 
 function handleScanResult(code){
-  var match=parts.find(function(p){
+  var match=STATE.parts.find(function(p){
     return p.partNumber.toLowerCase()===code.toLowerCase()||p.id===code;
   });
   if(match){
@@ -898,29 +1543,38 @@ function highlightPart(partId){
 }
 
 /* ========== UI WIRING ========== */
-$("modeProd").addEventListener("click",function(){mode="production";setActiveMode();render();});
-$("modeSpare").addEventListener("click",function(){mode="spare";setActiveMode();render();});
-$("modeAll").addEventListener("click",function(){mode="all";setActiveMode();render();});
-function setActiveMode(){["modeProd","modeSpare","modeAll"].forEach(function(id){$(id).classList.remove("active");});$({production:"modeProd",spare:"modeSpare",all:"modeAll"}[mode]).classList.add("active");}
-$("statusFilter").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;document.querySelectorAll("#statusFilter button").forEach(function(x){x.classList.remove("active");});b.classList.add("active");statusFilter=b.dataset.f;render();});
-$("searchInput").addEventListener("input",function(e){searchTerm=e.target.value;render();});
-document.querySelectorAll("thead th").forEach(function(th){th.addEventListener("click",function(){var k=th.dataset.sort;if(!k)return;if(sortKey===k)sortDir=sortDir==="asc"?"desc":"asc";else{sortKey=k;sortDir="asc";}render();});});
+$("modeProd").addEventListener("click",function(){STATE.mode="production";setActiveMode();render();});
+$("modeSpare").addEventListener("click",function(){STATE.mode="spare";setActiveMode();render();});
+$("modeAll").addEventListener("click",function(){STATE.mode="all";setActiveMode();render();});
+function setActiveMode(){["modeProd","modeSpare","modeAll"].forEach(function(id){$(id).classList.remove("active");});$({production:"modeProd",spare:"modeSpare",all:"modeAll"}[STATE.mode]).classList.add("active");}
+$("statusFilter").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;document.querySelectorAll("#statusFilter button").forEach(function(x){x.classList.remove("active");});b.classList.add("active");STATE.statusFilter=b.dataset.f;render();});
+$("searchInput").addEventListener("input",function(e){STATE.searchTerm=e.target.value;render();});
+document.querySelectorAll("thead th").forEach(function(th){th.addEventListener("click",function(){var k=th.dataset.sort;if(!k)return;if(STATE.sortKey===k)STATE.sortDir=STATE.sortDir==="asc"?"desc":"asc";else{STATE.sortKey=k;STATE.sortDir="asc";}render();});});
 $("buildBtn").addEventListener("click",buildOneSSC);
 $("reseedBtn").addEventListener("click",reseedBOM);
 
 /* Add Part */
-$("addBtn").addEventListener("click",function(){["newName","newCompany","newPN"].forEach(function(id){$(id).value="";});$("newMin").value=1;$("newStock").value=0;$("newPrice").value=0;$("newMode").value="production";$("addModalBg").classList.add("show");$("newName").focus();});
+$("addBtn").addEventListener("click",function(){["newName","newCompany","newPN","newPO","newJob"].forEach(function(id){$(id).value="";});$("newMin").value=1;$("newStock").value=0;$("newPrice").value=0;$("newMode").value="production";$("addModalBg").classList.add("show");$("newName").focus();});
 $("addCancel").addEventListener("click",function(){$("addModalBg").classList.remove("show");});
 $("addModalBg").addEventListener("click",function(e){if(e.target.id==="addModalBg")$("addModalBg").classList.remove("show");});
 $("addSave").addEventListener("click",function(){
   var name=$("newName").value.trim();
   var min=parseInt($("newMin").value,10);
+  var initialStock=parseInt($("newStock").value,10)||0;
+  var poNumber=$("newPO").value.trim();
+  var jobNumber=$("newJob").value.trim();
   if(!name){showToast("Description is required","error");return;}
   if(!min||min<1){showToast("Qty must be >= 1","error");return;}
+  if(initialStock>0&&!poNumber){showToast("PO Number required when initial stock > 0","error");$("newPO").focus();return;}
+  if(initialStock>0&&!jobNumber){showToast("Job Number required when initial stock > 0","error");$("newJob").focus();return;}
   var ref=db.collection("parts").doc();
-  var maxSn=parts.reduce(function(m,p){return Math.max(m,+p.sn||0);},0);
-  var doc={id:ref.id,sn:maxSn+1,name:name,company:$("newCompany").value.trim()||"-",partNumber:$("newPN").value.trim()||"-",min:min,stock:parseInt($("newStock").value,10)||0,unitPrice:parseFloat($("newPrice").value)||0,mode:$("newMode").value};
-  ref.set(doc).then(function(){$("addModalBg").classList.remove("show");showToast("Part added","success");}).catch(function(e){showToast("Add failed: "+e.message,"error");});
+  var maxSn=STATE.parts.reduce(function(m,p){return Math.max(m,+p.sn||0);},0);
+  var doc={id:ref.id,sn:maxSn+1,name:name,company:$("newCompany").value.trim()||"-",partNumber:$("newPN").value.trim()||"-",min:min,stock:initialStock,unitPrice:parseFloat($("newPrice").value)||0,mode:$("newMode").value,imageUrl:$("newImageUrl").value.trim()||""};
+  ref.set(doc).then(function(){
+    $("addModalBg").classList.remove("show");
+    showToast("Part added","success");
+    if(initialStock>0)logAudit(ref.id,name,doc.partNumber,0,initialStock,"Initial stock","Part added",poNumber,jobNumber);
+  }).catch(function(e){showToast("Add failed: "+e.message,"error");});
 });
 
 /* Build History */
@@ -944,7 +1598,7 @@ $("poList").addEventListener("click",function(e){
   var id=item.dataset.poid;
   var action=btn.dataset.action;
   if(action==="order")updatePOStatus(id,"ordered");
-  else if(action==="receive")receivePO(id,item.dataset.partid,parseInt(item.dataset.qty,10)||0);
+  else if(action==="receive")receivePO(id,item.dataset.partid,parseInt(item.dataset.qty,10)||0,item.dataset.pono,item.dataset.jobno);
   else if(action==="delete")deletePO(id);
 });
 
@@ -983,6 +1637,342 @@ $("authTabBar").addEventListener("click",function(e){
 });
 
 setSync("","Connecting...");
+
+/* Edit Part */
+$("editCancel").addEventListener("click",function(){$("editModalBg").classList.remove("show");});
+$("editModalBg").addEventListener("click",function(e){if(e.target.id==="editModalBg")$("editModalBg").classList.remove("show");});
+$("editSave").addEventListener("click",saveEditPart);
+
+/* Reason modal */
+$("reasonCancel").addEventListener("click",function(){pendingStockChange=null;$("reasonModalBg").classList.remove("show");});
+$("reasonConfirm").addEventListener("click",confirmStockChange);
+$("reasonNotes").addEventListener("keydown",function(e){if(e.key==="Enter")confirmStockChange();});
+
+/* Audit Log */
+$("auditBtn").addEventListener("click",openAuditModal);
+$("auditClose").addEventListener("click",function(){$("auditModalBg").classList.remove("show");});
+$("auditModalBg").addEventListener("click",function(e){if(e.target.id==="auditModalBg")$("auditModalBg").classList.remove("show");});
+$("auditSearch").addEventListener("input",function(){loadAuditLog(this.value);});
+
+/* Inline edit/delete/move — event delegation on tbody and mobileList */
+$("tbody").addEventListener("click",function(e){
+  var editBtn=e.target.closest(".btn-row-edit");
+  if(editBtn){openEditModal(editBtn.dataset.id);return;}
+  var delBtn=e.target.closest(".btn-row-delete");
+  if(delBtn){openDeleteModal(delBtn.dataset.id);return;}
+  var moveBtn=e.target.closest(".btn-row-move");
+  if(moveBtn){moveToProduction(moveBtn.dataset.id);return;}
+});
+$("mobileList").addEventListener("click",function(e){
+  var editBtn=e.target.closest(".btn-row-edit");
+  if(editBtn){openEditModal(editBtn.dataset.id);return;}
+  var delBtn=e.target.closest(".btn-row-delete");
+  if(delBtn){openDeleteModal(delBtn.dataset.id);return;}
+  var moveBtn=e.target.closest(".btn-row-move");
+  if(moveBtn){moveToProduction(moveBtn.dataset.id);return;}
+});
+
+/* Build SSC Modal */
+$("buildCancel").addEventListener("click",function(){$("buildModalBg").classList.remove("show");});
+$("buildModalBg").addEventListener("click",function(e){if(e.target.id==="buildModalBg")$("buildModalBg").classList.remove("show");});
+$("buildConfirm").addEventListener("click",executeBuild);
+$("buildJob").addEventListener("keydown",function(e){if(e.key==="Enter")executeBuild();});
+
+/* Spare to Production Modal */
+$("spareToProCancel").addEventListener("click",function(){$("spareToProModalBg").classList.remove("show");});
+$("spareToProModalBg").addEventListener("click",function(e){if(e.target.id==="spareToProModalBg")$("spareToProModalBg").classList.remove("show");});
+$("spareToProConfirm").addEventListener("click",executeSpareToProduction);
+$("spareToProNotes").addEventListener("keydown",function(e){if(e.key==="Enter")executeSpareToProduction();});
+
+/* Delete Part Modal */
+$("deleteCancel").addEventListener("click",function(){$("deleteModalBg").classList.remove("show");});
+$("deleteModalBg").addEventListener("click",function(e){if(e.target.id==="deleteModalBg")$("deleteModalBg").classList.remove("show");});
+$("deleteConfirm").addEventListener("click",executeDeletePart);
+$("deleteNotes").addEventListener("keydown",function(e){if(e.key==="Enter")executeDeletePart();});
+
+/* Reorder Modal */
+$("reorderBtn").addEventListener("click",openReorderModal);
+$("reorderClose").addEventListener("click",function(){$("reorderModalBg").classList.remove("show");});
+$("reorderModalBg").addEventListener("click",function(e){if(e.target.id==="reorderModalBg")$("reorderModalBg").classList.remove("show");});
+$("reorderList").addEventListener("click",function(e){
+  var btn=e.target.closest(".ri-po-btn");
+  if(!btn)return;
+  var partId=btn.dataset.partid;
+  $("reorderModalBg").classList.remove("show");
+  openPOModal();
+  switchPOTab("create");
+  if(partId)$("poPartSelect").value=partId;
+});
+
+/* Export Modal */
+$("exportBtn").addEventListener("click",function(){$("exportModalBg").classList.add("show");});
+$("exportClose").addEventListener("click",function(){$("exportModalBg").classList.remove("show");});
+$("exportModalBg").addEventListener("click",function(e){if(e.target.id==="exportModalBg")$("exportModalBg").classList.remove("show");});
+$("exportInventoryBtn").addEventListener("click",function(){exportInventoryCSV(false);});
+$("exportInventoryAllBtn").addEventListener("click",function(){exportInventoryCSV(true);});
+$("exportAuditBtn").addEventListener("click",exportAuditCSV);
+$("exportBuildsBtn").addEventListener("click",exportBuildsCSV);
+
+/* Products / Multi-BOM Placeholder */
+$("productsBtn").addEventListener("click",openProductsModal);
+$("productsClose").addEventListener("click",function(){$("productsModalBg").classList.remove("show");});
+$("productsModalBg").addEventListener("click",function(e){if(e.target.id==="productsModalBg")$("productsModalBg").classList.remove("show");});
+
+/* ========== PHASE 3: ANALYTICS DASHBOARD ========== */
+function openAnalyticsModal(){
+  $("analyticsModalBg").classList.add("show");
+  /* Defer chart build to next tick so the modal is visible first */
+  setTimeout(buildAnalytics, 50);
+}
+
+function buildAnalytics(){
+  var p=STATE.parts;
+  var totalParts=p.length;
+  var prodParts=p.filter(function(x){return x.mode==="production";});
+  var buildCap=prodParts.length?Math.min.apply(null,prodParts.map(function(x){return Math.floor(x.stock/Math.max(1,x.min));})):0;
+  var totalValue=p.reduce(function(s,x){return s+x.stock*x.unitPrice;},0);
+  var lowCount=p.filter(function(x){var s=statusOf(x);return s==="out"||s==="low";}).length;
+  $("anKpis").innerHTML=
+    '<div class="an-kpi"><div class="an-label">Total Parts</div><div class="an-val">'+totalParts+'</div><div class="an-sub">in database</div></div>'+
+    '<div class="an-kpi"><div class="an-label">Build Capacity</div><div class="an-val">'+buildCap+'</div><div class="an-sub">SSC units possible</div></div>'+
+    '<div class="an-kpi"><div class="an-label">Inventory Value</div><div class="an-val">'+fmtMoney(totalValue)+'</div><div class="an-sub">stock × unit price</div></div>'+
+    '<div class="an-kpi"><div class="an-label">Need Reorder</div><div class="an-val" style="color:#f87171;">'+lowCount+'</div><div class="an-sub">out or low</div></div>';
+
+  /* Destroy existing charts before recreating */
+  ["chartStatus","chartValue","chartVendor","chartCoverage"].forEach(function(id){
+    if(STATE.charts[id]){STATE.charts[id].destroy();delete STATE.charts[id];}
+  });
+
+  /* — Chart 1: Stock Health donut — */
+  var cOut=0,cLow=0,cWarn=0,cOk=0;
+  p.forEach(function(x){var s=statusOf(x);if(s==="out")cOut++;else if(s==="low")cLow++;else if(s==="warn")cWarn++;else cOk++;});
+  STATE.charts["chartStatus"]=new Chart($("chartStatus"),{type:"doughnut",data:{labels:["Out","Low","Reorder","OK"],datasets:[{data:[cOut,cLow,cWarn,cOk],backgroundColor:["#ef4444","#f97316","#eab308","#22c55e"],borderWidth:0}]},options:{plugins:{legend:{labels:{color:"#94a3b8",font:{size:11}}}},cutout:"60%",maintainAspectRatio:false}});
+
+  /* — Chart 2: Top 10 by inventory value (horizontal bar) — */
+  var byVal=p.slice().sort(function(a,b){return(b.stock*b.unitPrice)-(a.stock*a.unitPrice);}).slice(0,10);
+  STATE.charts["chartValue"]=new Chart($("chartValue"),{type:"bar",data:{labels:byVal.map(function(x){return x.name.length>22?x.name.slice(0,22)+"\u2026":x.name;}),datasets:[{data:byVal.map(function(x){return+(x.stock*x.unitPrice).toFixed(2);}),backgroundColor:"rgba(249,115,22,.7)",borderRadius:4}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b",callback:function(v){return"$"+v.toLocaleString();}},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}},maintainAspectRatio:false}});
+
+  /* — Chart 3: Parts by vendor — */
+  var vendorMap={};
+  p.forEach(function(x){var co=x.company||"Unknown";vendorMap[co]=(vendorMap[co]||0)+1;});
+  var vendorArr=Object.keys(vendorMap).map(function(k){return{name:k,count:vendorMap[k]};}).sort(function(a,b){return b.count-a.count;}).slice(0,10);
+  STATE.charts["chartVendor"]=new Chart($("chartVendor"),{type:"bar",data:{labels:vendorArr.map(function(x){return x.name.length>18?x.name.slice(0,18)+"\u2026":x.name;}),datasets:[{data:vendorArr.map(function(x){return x.count;}),backgroundColor:"rgba(96,165,250,.7)",borderRadius:4}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b"},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}},maintainAspectRatio:false}});
+
+  /* — Chart 4: Build coverage per production part — */
+  var covParts=prodParts.slice().sort(function(a,b){return(a.stock/Math.max(1,a.min))-(b.stock/Math.max(1,b.min));}).slice(0,10);
+  STATE.charts["chartCoverage"]=new Chart($("chartCoverage"),{type:"bar",data:{labels:covParts.map(function(x){return x.name.length>22?x.name.slice(0,22)+"\u2026":x.name;}),datasets:[{data:covParts.map(function(x){return Math.floor(x.stock/Math.max(1,x.min));}),backgroundColor:covParts.map(function(x){var v=Math.floor(x.stock/Math.max(1,x.min));return v<=0?"rgba(239,68,68,.7)":v<2?"rgba(249,115,22,.7)":"rgba(34,197,94,.7)";}),borderRadius:4}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b"},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}},maintainAspectRatio:false}});
+}
+
+/* ========== PHASE 3: VENDOR MANAGEMENT ========== */
+function openVendorsModal(){
+  $("vendorsModalBg").classList.add("show");
+  $("vendorListView").style.display="block";
+  $("vendorDetailView").style.display="none";
+  loadVendorList();
+}
+
+function loadVendorList(){
+  /* Aggregate vendors from parts */
+  var vendorMap={};
+  STATE.parts.forEach(function(p){
+    var co=p.company||"Unknown";
+    if(!vendorMap[co])vendorMap[co]={name:co,partCount:0,lineValue:0,outCount:0};
+    vendorMap[co].partCount++;
+    vendorMap[co].lineValue+=p.stock*p.unitPrice;
+    if(statusOf(p)==="out"||statusOf(p)==="low")vendorMap[co].outCount++;
+  });
+  var vendors=Object.values(vendorMap).sort(function(a,b){return b.lineValue-a.lineValue;});
+  var container=$("vendorList");
+  if(!vendors.length){container.innerHTML='<div class="empty"><div class="big">&#x1F3ED;</div><div>No vendors found.</div></div>';return;}
+
+  /* Fetch extra contact info from Firestore */
+  db.collection("vendors").get().then(function(snap){
+    var contacts={};
+    snap.forEach(function(doc){contacts[doc.id]=doc.data();});
+    var html='<div style="font-size:12px;color:#64748b;margin-bottom:10px;">'+vendors.length+' vendor(s) found in inventory</div>';
+    vendors.forEach(function(v){
+      var ci=contacts[v.name]||{};
+      var alertHtml=v.outCount>0?'<span class="badge low" style="margin-left:4px;">'+v.outCount+' low/out</span>':'';
+      html+='<div class="vendor-card" data-vendor="'+escapeHTML(v.name)+'">'
+        +'<div style="flex:1;min-width:0;">'
+        +'<div class="vc-name">'+escapeHTML(v.name)+alertHtml+'</div>'
+        +'<div class="vc-meta">'+v.partCount+' part(s) \u00b7 Stock value: '+fmtMoney(v.lineValue)+(ci.email?' \u00b7 '+escapeHTML(ci.email):'')+'</div>'
+        +'</div>'
+        +'<span style="color:#64748b;font-size:18px;">&#x276F;</span>'
+        +'</div>';
+    });
+    container.innerHTML=html;
+    container.addEventListener("click",function(e){
+      var card=e.target.closest(".vendor-card");
+      if(card)openVendorDetail(card.dataset.vendor,vendorMap[card.dataset.vendor],contacts[card.dataset.vendor]||{});
+    },{once:true});
+  }).catch(function(){
+    var html='';
+    vendors.forEach(function(v){
+      html+='<div class="vendor-card" data-vendor="'+escapeHTML(v.name)+'">'
+        +'<div style="flex:1;"><div class="vc-name">'+escapeHTML(v.name)+'</div><div class="vc-meta">'+v.partCount+' part(s) \u00b7 '+fmtMoney(v.lineValue)+'</div></div>'
+        +'<span style="color:#64748b;font-size:18px;">&#x276F;</span></div>';
+    });
+    container.innerHTML=html;
+  });
+}
+
+function openVendorDetail(vendorName,stats,contact){
+  $("vendorListView").style.display="none";
+  $("vendorDetailView").style.display="block";
+  var vendorParts=STATE.parts.filter(function(p){return p.company===vendorName;});
+  var partsHtml=vendorParts.map(function(p){
+    var s=statusOf(p);
+    return'<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #1f2937;">'
+      +'<span class="badge '+s+'">'+statusLabel(s)+'</span>'
+      +'<div style="flex:1;font-size:12px;"><strong>'+escapeHTML(p.name)+'</strong><br/><span style="color:#64748b;font-family:ui-monospace,monospace;">'+escapeHTML(p.partNumber)+'</span></div>'
+      +'<div style="font-size:12px;color:#94a3b8;text-align:right;">Stock: <strong>'+p.stock+'</strong><br/>'+fmtMoney(p.unitPrice)+' ea</div>'
+      +'</div>';
+  }).join("");
+  $("vendorDetailContent").innerHTML=
+    '<div style="font-weight:700;font-size:16px;color:#f1f5f9;margin-bottom:10px;">'+escapeHTML(vendorName)+'</div>'
+    +'<div class="vendor-detail">'
+    +'<div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Contact Information</div>'
+    +'<label style="font-size:11px;color:#94a3b8;">Phone</label><input id="vPhone" type="text" value="'+escapeHTML(contact.phone||"")+'" placeholder="+1 (555) 000-0000" style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:6px 10px;border-radius:6px;font-size:13px;margin-bottom:6px;" />'
+    +'<label style="font-size:11px;color:#94a3b8;">Email</label><input id="vEmail" type="email" value="'+escapeHTML(contact.email||"")+'" placeholder="orders@vendor.com" style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:6px 10px;border-radius:6px;font-size:13px;margin-bottom:6px;" />'
+    +'<label style="font-size:11px;color:#94a3b8;">Website</label><input id="vWeb" type="url" value="'+escapeHTML(contact.website||"")+'" placeholder="https://..." style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:6px 10px;border-radius:6px;font-size:13px;margin-bottom:6px;" />'
+    +'<label style="font-size:11px;color:#94a3b8;">Lead Time (days)</label><input id="vLead" type="number" min="0" value="'+escapeHTML(String(contact.leadDays||""))+'" placeholder="e.g. 14" style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:6px 10px;border-radius:6px;font-size:13px;margin-bottom:6px;" />'
+    +'<label style="font-size:11px;color:#94a3b8;">Notes</label><input id="vNotes" type="text" value="'+escapeHTML(contact.notes||"")+'" placeholder="Preferred contact, account number..." style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:6px 10px;border-radius:6px;font-size:13px;margin-bottom:10px;" />'
+    +'<button class="btn btn-primary" id="vSaveBtn" style="width:100%;">Save Contact Info</button>'
+    +'</div>'
+    +'<div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:12px 0 6px;">Parts from this Vendor ('+vendorParts.length+')</div>'
+    +'<div style="max-height:220px;overflow-y:auto;">'+partsHtml+'</div>';
+  $("vSaveBtn").addEventListener("click",function(){
+    var data={phone:$("vPhone").value.trim(),email:$("vEmail").value.trim(),website:$("vWeb").value.trim(),leadDays:parseInt($("vLead").value,10)||0,notes:$("vNotes").value.trim(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+    db.collection("vendors").doc(vendorName).set(data,{merge:true})
+      .then(function(){showToast("Vendor info saved","success");})
+      .catch(function(e){showToast("Save failed: "+e.message,"error");});
+  });
+}
+
+/* ========== PHASE 3: QR LABELS ========== */
+function openQRModal(){
+  $("qrModalBg").classList.add("show");
+  buildQRPartList();
+}
+
+function buildQRPartList(){
+  var container=$("qrPartList");
+  var sorted=STATE.parts.slice().sort(function(a,b){return a.sn-b.sn;});
+  if(!sorted.length){container.innerHTML='<div class="empty"><div class="big">&#x1F4E6;</div><div>No parts yet.</div></div>';return;}
+  container.innerHTML=sorted.map(function(p){
+    return'<div class="qr-part-row">'
+      +'<input type="checkbox" id="qrc_'+p.id+'" value="'+p.id+'" checked />'
+      +'<label for="qrc_'+p.id+'"><strong>'+escapeHTML(p.name)+'</strong> <span class="qr-pn">'+escapeHTML(p.partNumber)+'</span></label>'
+      +'</div>';
+  }).join("");
+  updateQRCount();
+  container.addEventListener("change",updateQRCount);
+}
+
+function updateQRCount(){
+  var checked=document.querySelectorAll("#qrPartList input[type=checkbox]:checked").length;
+  $("qrSelectedCount").textContent=checked+" part(s) selected";
+}
+
+function printQRLabels(){
+  var checked=Array.from(document.querySelectorAll("#qrPartList input[type=checkbox]:checked")).map(function(cb){return cb.value;});
+  if(!checked.length){showToast("Select at least one part","error");return;}
+  var selectedParts=STATE.parts.filter(function(p){return checked.includes(p.id);});
+  /* Generate QR data URLs for all selected parts, then open print window */
+  var promises=selectedParts.map(function(p){
+    return QRCode.toDataURL(p.partNumber,{width:120,margin:1,color:{dark:"#000000",light:"#ffffff"}})
+      .then(function(url){return{part:p,qrUrl:url};});
+  });
+  Promise.all(promises).then(function(items){
+    var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>QR Labels</title>'
+      +'<style>body{font-family:sans-serif;background:white;}@page{size:A4;margin:8mm;}.label-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm;}.label-item{border:1px solid #ccc;border-radius:3px;padding:3mm;display:flex;flex-direction:column;align-items:center;gap:2mm;page-break-inside:avoid;}.label-item img{width:90px;height:90px;}.l-name{font-size:8pt;font-weight:700;text-align:center;word-break:break-word;color:#000;max-width:90px;}.l-pn{font-size:7pt;font-family:monospace;color:#333;}.l-co{font-size:6.5pt;color:#555;text-align:center;}</style>'
+      +'</head><body><div class="label-grid">'
+      +items.map(function(item){
+        var p=item.part;
+        return'<div class="label-item">'
+          +'<img src="'+item.qrUrl+'" alt="QR code for '+escapeHTML(p.partNumber)+'" />'
+          +'<div class="l-name">'+escapeHTML(p.name.length>40?p.name.slice(0,40)+"\u2026":p.name)+'</div>'
+          +'<div class="l-pn">'+escapeHTML(p.partNumber)+'</div>'
+          +'<div class="l-co">'+escapeHTML(p.company)+'</div>'
+          +'</div>';
+      }).join("")
+      +'</div><script>window.onload=function(){window.print();}<\/script></body></html>';
+    var w=window.open("","_blank","width=900,height=700");
+    if(w){w.document.write(html);w.document.close();}
+    else{showToast("Pop-up blocked — allow pop-ups to print labels","error");}
+  }).catch(function(e){showToast("QR generation failed: "+e.message,"error");});
+}
+
+/* ========== PHASE 4: NOTIFICATIONS ========== */
+/* Tracks which part+status combos have already fired a browser notification
+   (stored in localStorage so they survive page refresh) */
+function getNotifiedSet(){try{return new Set(JSON.parse(localStorage.getItem(STATE.NOTIF_KEY)||"[]"));}catch(e){return new Set();}}
+function saveNotifiedSet(s){try{localStorage.setItem(STATE.NOTIF_KEY,JSON.stringify(Array.from(s)));}catch(e){}}
+
+function requestNotificationPermission(){
+  if(!("Notification" in window)){showToast("This browser does not support notifications","error");return;}
+  Notification.requestPermission().then(function(perm){
+    if(perm==="granted"){showToast("Low-stock notifications enabled \u2705","success");checkAndNotifyLowStock(true);}
+    else{showToast("Notification permission denied","error");}
+  });
+}
+
+function checkAndNotifyLowStock(force){
+  if(!("Notification" in window)||Notification.permission!=="granted")return;
+  var notified=getNotifiedSet();
+  var changed=false;
+  STATE.parts.forEach(function(p){
+    var s=statusOf(p);
+    if(s!=="out"&&s!=="low")return;
+    var key=p.id+":"+s;
+    if(!notified.has(key)||force){
+      notified.add(key);
+      changed=true;
+      var title=s==="out"?"Out of Stock: "+p.name:"Low Stock: "+p.name;
+      var body="Part #: "+p.partNumber+" \u00b7 Stock: "+p.stock+" \u00b7 Required/SSC: "+p.min;
+      /* Small delay to avoid flooding on initial load */
+      setTimeout(function(){
+        try{new Notification(title,{body:body,icon:"icons/icon-192.png",tag:"ssc-"+p.id});}catch(e){}
+      },200);
+    }
+  });
+  /* Clear entries for parts that are back in stock */
+  STATE.parts.forEach(function(p){
+    var s=statusOf(p);
+    if(s==="ok"||s==="warn"){notified.delete(p.id+":out");notified.delete(p.id+":low");changed=true;}
+  });
+  if(changed)saveNotifiedSet(notified);
+}
+
+/* ========== PHASE 4: USER MANAGEMENT PLACEHOLDER ========== */
+function openUserMgmtModal(){
+  $("userMgmtModalBg").classList.add("show");
+}
+
+/* ===== NEW MODAL EVENT WIRING (Phase 3 + 4 buttons) ===== */
+$("analyticsBtn").addEventListener("click",openAnalyticsModal);
+$("analyticsClose").addEventListener("click",function(){$("analyticsModalBg").classList.remove("show");});
+$("analyticsModalBg").addEventListener("click",function(e){if(e.target.id==="analyticsModalBg")$("analyticsModalBg").classList.remove("show");});
+
+$("vendorsBtn").addEventListener("click",openVendorsModal);
+$("vendorsClose").addEventListener("click",function(){$("vendorsModalBg").classList.remove("show");});
+$("vendorsModalBg").addEventListener("click",function(e){if(e.target.id==="vendorsModalBg")$("vendorsModalBg").classList.remove("show");});
+$("vendorBack").addEventListener("click",function(){$("vendorListView").style.display="block";$("vendorDetailView").style.display="none";loadVendorList();});
+
+$("qrLabelsBtn").addEventListener("click",openQRModal);
+$("qrClose").addEventListener("click",function(){$("qrModalBg").classList.remove("show");});
+$("qrModalBg").addEventListener("click",function(e){if(e.target.id==="qrModalBg")$("qrModalBg").classList.remove("show");});
+$("qrSelectAll").addEventListener("click",function(){document.querySelectorAll("#qrPartList input[type=checkbox]").forEach(function(cb){cb.checked=true;});updateQRCount();});
+$("qrSelectNone").addEventListener("click",function(){document.querySelectorAll("#qrPartList input[type=checkbox]").forEach(function(cb){cb.checked=false;});updateQRCount();});
+$("qrPrintBtn").addEventListener("click",printQRLabels);
+
+$("notifBtn").addEventListener("click",requestNotificationPermission);
+
+$("userMgmtBtn").addEventListener("click",openUserMgmtModal);
+$("userMgmtClose").addEventListener("click",function(){$("userMgmtModalBg").classList.remove("show");});
+$("userMgmtModalBg").addEventListener("click",function(e){if(e.target.id==="userMgmtModalBg")$("userMgmtModalBg").classList.remove("show");});
+
 bootAppCheck();
 </script>
 </body>
