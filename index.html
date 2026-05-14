@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,10 +6,13 @@
 <meta name="theme-color" content="#0f172a" />
 <title>SSC Industrial Inventory</title>
 <!-- For local file:// testing, uncomment below BEFORE the Firebase scripts -->
-<!-- <script>self.FIREBASE_APPCHECK_DEBUG_TOKEN = "7BD46697-58FA-47CD-90ED-8EEFFFD980EF";</script>  -->
+<!-- <script>self.FIREBASE_APPCHECK_DEBUG_TOKEN = "7BD46697-58FA-47CD-90ED-8EEFFFD980EF";</script> -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghqhZmdczILJ7P09fScbrz6G7ALt8IJf2RQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
 /* FIX 1: Original had ", ::before" - fixed to "*, ::before" */
 *, ::before, *::after { box-sizing: border-box; }
@@ -31,6 +33,16 @@ input, select { font-family: inherit; }
 .dot.live { background: #22c55e; animation: pulse 2s infinite; }
 .dot.err { background: #ef4444; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.5); } 70% { box-shadow: 0 0 0 8px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
+/* Low stock alert badge */
+.low-alert { display: inline-flex; align-items: center; gap: 6px; background: rgba(220,38,38,.15); border: 1px solid rgba(220,38,38,.4); border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 700; color: #f87171; animation: alertPulse 2s infinite; }
+.low-alert-icon { font-size: 14px; }
+@keyframes alertPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,.4); } 50% { box-shadow: 0 0 6px 2px rgba(220,38,38,.3); } }
+/* User pill */
+.user-pill { display: inline-flex; align-items: center; gap: 8px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 5px 10px; }
+.user-email { font-size: 12px; color: #94a3b8; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; padding: 2px 7px; border-radius: 999px; }
+.role-badge.admin { background: rgba(249,115,22,.2); color: #fdba74; border: 1px solid rgba(249,115,22,.4); }
+.role-badge.viewer { background: rgba(148,163,184,.1); color: #94a3b8; border: 1px solid #334155; }
 .wrap { max-width: 1400px; margin: 0 auto; padding: 20px; }
 .kpis { display: grid; gap: 12px; margin-bottom: 18px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .kpi { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; transition: border-color .15s; }
@@ -49,7 +61,7 @@ input, select { font-family: inherit; }
 .search { flex: 1 1 260px; min-width: 200px; position: relative; }
 .search input { width: 100%; background: #111827; border: 1px solid #1f2937; color: #e5e7eb; padding: 9px 12px 9px 34px; border-radius: 8px; font-size: 14px; transition: border-color .15s; }
 .search input:focus { outline: none; border-color: #f97316; }
-.search::before { content: "⌕"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 16px; pointer-events: none; }
+.search::before { content: "\2395"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 16px; pointer-events: none; }
 .filter-pills { display: inline-flex; gap: 4px; background: #111827; padding: 3px; border-radius: 8px; border: 1px solid #1f2937; }
 .filter-pills button { border: 0; background: transparent; color: #cbd5e1; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; }
 .filter-pills button.active { background: #1e293b; color: #fdba74; }
@@ -61,13 +73,15 @@ input, select { font-family: inherit; }
 .btn-primary { background: #2563eb; }
 .btn-warn { background: #b45309; }
 .btn-ghost { background: #1e293b; border: 1px solid #334155; color: #cbd5e1; }
+.btn-success { background: #16a34a; }
+.btn-danger { background: #dc2626; }
 .card-wrap { background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; overflow: hidden; }
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 980px; }
 thead th { background: #111827; color: #94a3b8; text-transform: uppercase; letter-spacing: .8px; font-size: 10.5px; font-weight: 700; text-align: left; padding: 11px 12px; border-bottom: 1px solid #1f2937; position: sticky; top: 0; cursor: pointer; user-select: none; white-space: nowrap; }
 thead th:hover { color: #fdba74; }
-thead th.sorted::after { content: " ▾"; color: #f97316; }
-thead th.sorted.asc::after { content: " ▴"; }
+thead th.sorted::after { content: " \25BE"; color: #f97316; }
+thead th.sorted.asc::after { content: " \25B4"; }
 tbody tr { border-bottom: 1px solid #1f2937; transition: background .12s; }
 tbody tr:hover { background: #111827; }
 tbody tr:last-child { border-bottom: 0; }
@@ -83,11 +97,15 @@ tr.row-out:hover { background: rgba(220,38,38,.14); }
 tr.row-low { background: rgba(234,88,12,.07); }
 tr.row-low:hover { background: rgba(234,88,12,.13); }
 tr.row-warn { background: rgba(202,138,4,.05); }
+tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !important; }
 .badge { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .8px; padding: 3px 8px; border-radius: 999px; text-transform: uppercase; border: 1px solid transparent; }
 .badge.ok { background: rgba(34,197,94,.15); color: #4ade80; border-color: rgba(34,197,94,.3); }
 .badge.warn { background: rgba(202,138,4,.15); color: #facc15; border-color: rgba(202,138,4,.3); }
 .badge.low { background: rgba(234,88,12,.15); color: #fb923c; border-color: rgba(234,88,12,.3); }
 .badge.out { background: rgba(220,38,38,.15); color: #f87171; border-color: rgba(220,38,38,.3); }
+.badge.pending { background: rgba(234,88,12,.15); color: #fb923c; border-color: rgba(234,88,12,.3); }
+.badge.ordered { background: rgba(59,130,246,.15); color: #60a5fa; border-color: rgba(59,130,246,.3); }
+.badge.received { background: rgba(34,197,94,.15); color: #4ade80; border-color: rgba(34,197,94,.3); }
 .stock-ctrl { display: inline-flex; align-items: center; gap: 4px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 2px; }
 .stock-ctrl button { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #cbd5e1; font-size: 16px; font-weight: 700; transition: background .12s; }
 .stock-ctrl button:hover { background: #334155; color: white; }
@@ -105,22 +123,70 @@ tr.row-warn { background: rgba(202,138,4,.05); }
 .footer-bar { margin-top: 18px; padding: 14px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: space-between; align-items: center; color: #64748b; font-size: 12px; }
 .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); padding: 20px; }
 .modal-bg.show { display: flex; }
-.modal { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 22px; width: 100%; max-width: 460px; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+.modal { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 22px; width: 100%; max-width: 460px; box-shadow: 0 20px 50px rgba(0,0,0,.5); max-height: 90vh; overflow-y: auto; }
 .modal h2 { margin: 0 0 14px 0; font-size: 17px; color: #f8fafc; }
 .modal label { display: block; font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; margin-top: 10px; }
 .modal input, .modal select { width: 100%; background: #0b1220; border: 1px solid #334155; color: #e5e7eb; padding: 8px 10px; border-radius: 6px; font-size: 14px; }
 .modal input:focus, .modal select:focus { outline: none; border-color: #f97316; }
 .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
-.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1e293b; color: #f1f5f9; border: 1px solid #334155; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 500; box-shadow: 0 10px 25px rgba(0,0,0,.4); opacity: 0; transition: opacity .25s, transform .25s; z-index: 200; max-width: 90%; }
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast.success { border-color: #16a34a; }
-.toast.error { border-color: #dc2626; }
+/* Tabs */
+.tab-bar { display: flex; gap: 2px; background: #0b1220; border: 1px solid #334155; border-radius: 8px; padding: 3px; margin-bottom: 16px; }
+.tab-btn { border: 0; background: transparent; color: #94a3b8; padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; transition: all .15s; }
+.tab-btn.active { background: #1e293b; color: #fdba74; }
+/* Purchase orders */
+.po-item { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+.po-item .po-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.po-item .po-name { font-weight: 600; color: #f1f5f9; font-size: 13px; flex: 1; }
+.po-item .po-meta { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
+.po-item .po-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+/* Build history */
+.history-item { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+.history-item .hist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.history-item .hist-time { font-size: 12px; color: #94a3b8; }
+.history-item .hist-user { font-size: 11px; color: #64748b; margin-bottom: 6px; }
+.history-item .hist-parts { font-size: 11px; color: #cbd5e1; line-height: 1.9; }
+/* Scan */
+.scan-result-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-top: 10px; }
+.scan-result-box .sr-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.scan-result-box .sr-name { font-size: 14px; font-weight: 600; color: #f1f5f9; }
+.scan-result-box .sr-meta { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+/* CSV import */
+.import-instructions { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 12px; color: #94a3b8; line-height: 1.9; }
+.import-instructions code { background: #1e293b; padding: 1px 5px; border-radius: 4px; color: #fdba74; font-family: ui-monospace, monospace; font-size: 11px; }
 @media (max-width: 760px) {
   .wrap { padding: 12px; } .top { padding: 10px 14px; } .brand h1 { font-size: 14px; } .brand .sub { display: none; } .kpi .value { font-size: 22px; } .table-scroll { display: none; } .mobile-list { display: block; }
 }
 </style>
 </head>
 <body>
+
+<!-- ===== LOGIN MODAL ===== -->
+<div class="modal-bg show" id="loginModalBg" style="z-index:200;">
+  <div class="modal" style="max-width:380px;">
+    <div class="brand" style="justify-content:center;margin-bottom:20px;">
+      <div class="brand-mark">SSC</div>
+      <div><h1>SSC Industrial Inventory</h1><div class="sub" style="display:block;">Sign in to continue</div></div>
+    </div>
+    <div class="tab-bar" id="authTabBar">
+      <button class="tab-btn active" data-authtab="signin">Sign In</button>
+      <button class="tab-btn" data-authtab="signup">Register</button>
+    </div>
+    <div id="authTabSignin">
+      <label>Email</label><input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+      <label>Password</label><input id="loginPassword" type="password" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;" autocomplete="current-password" />
+      <div class="actions" style="margin-top:16px;"><button class="btn btn-primary" id="loginBtn" style="flex:1;text-align:center;">Sign In</button></div>
+    </div>
+    <div id="authTabSignup" style="display:none;">
+      <label>Email</label><input id="regEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+      <label>Password</label><input id="regPassword" type="password" placeholder="Min 6 characters" autocomplete="new-password" />
+      <div class="actions" style="margin-top:16px;"><button class="btn btn-primary" id="registerBtn" style="flex:1;text-align:center;">Create Account</button></div>
+      <p style="font-size:11px;color:#64748b;text-align:center;margin-top:8px;">The first account registered becomes Admin.</p>
+    </div>
+    <div id="loginErr" style="color:#f87171;font-size:12px;margin-top:8px;display:none;"></div>
+  </div>
+</div>
+
+<!-- ===== HEADER ===== -->
 <header class="top">
   <div class="brand">
     <div class="brand-mark">SSC</div>
@@ -134,8 +200,19 @@ tr.row-warn { background: rgba(202,138,4,.05); }
     <button id="modeSpare" role="tab">Spare</button>
     <button id="modeAll" role="tab">All</button>
   </div>
-  <div class="sync"><span id="syncDot" class="dot"></span><span id="syncText">Connecting...</span></div>
+  <div id="lowStockAlert" class="low-alert" style="display:none;" title="Low / Out-of-stock parts">
+    <span class="low-alert-icon">&#x26A0;</span><span id="lowAlertCount">0</span>&nbsp;Low Stock
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <div class="sync"><span id="syncDot" class="dot"></span><span id="syncText">Connecting...</span></div>
+    <div id="userPill" class="user-pill" style="display:none;">
+      <span id="userEmail" class="user-email"></span>
+      <span id="userRoleBadge" class="role-badge"></span>
+      <button class="btn btn-ghost" id="signOutBtn" style="padding:4px 10px;font-size:12px;">Sign Out</button>
+    </div>
+  </div>
 </header>
+
 <main class="wrap">
   <section class="kpis">
     <div class="kpi accent"><div class="label">Build Capacity</div><div class="value"><span id="kpiBuild">0</span> SSC</div><div class="hint" id="kpiBottleneck">--</div><button id="buildBtn" class="build-btn" disabled>BUILD 1 SSC</button></div>
@@ -151,8 +228,12 @@ tr.row-warn { background: rgba(202,138,4,.05); }
       <button data-f="low">Low <span class="count" id="cLow">0</span></button>
       <button data-f="ok">OK <span class="count" id="cOk">0</span></button>
     </div>
-    <button id="addBtn" class="btn btn-primary">+ Add Part</button>
-    <button id="reseedBtn" class="btn btn-warn">Reseed Full BOM</button>
+    <button id="scanBtn" class="btn btn-ghost">&#x1F4F7; Scan</button>
+    <button id="historyBtn" class="btn btn-ghost">&#x1F4CB; History</button>
+    <button id="poBtn" class="btn btn-ghost">&#x1F6D2; Orders</button>
+    <button id="addBtn" class="btn btn-primary admin-only">+ Add Part</button>
+    <button id="importBtn" class="btn btn-ghost admin-only">&#x2B06; Import CSV</button>
+    <button id="reseedBtn" class="btn btn-warn admin-only">Reseed Full BOM</button>
   </section>
   <section class="card-wrap">
     <div class="table-scroll"><table id="invTable"><thead><tr>
@@ -167,10 +248,12 @@ tr.row-warn { background: rgba(202,138,4,.05); }
       <th data-sort="lineValue" class="price">Line $</th>
     </tr></thead><tbody id="tbody"></tbody></table></div>
     <div class="mobile-list" id="mobileList"></div>
-    <div id="emptyState" class="empty" style="display:none;"><div class="big">📦</div><div>No parts match your filters.</div></div>
+    <div id="emptyState" class="empty" style="display:none;"><div class="big">&#x1F4E6;</div><div>No parts match your filters.</div></div>
   </section>
   <div class="footer-bar"><div>SSC Industrial Inventory - live-sync via Firestore</div><div id="lastUpdate"></div></div>
 </main>
+
+<!-- ===== ADD PART MODAL ===== -->
 <div class="modal-bg" id="addModalBg"><div class="modal">
   <h2>Add New Part</h2>
   <label>Description</label><input id="newName" type="text" placeholder="e.g. Relay 3, 24VDC, 8A" />
@@ -182,7 +265,73 @@ tr.row-warn { background: rgba(202,138,4,.05); }
   <label>Mode</label><select id="newMode"><option value="production">Production</option><option value="spare">Spare</option></select>
   <div class="actions"><button class="btn btn-ghost" id="addCancel">Cancel</button><button class="btn btn-primary" id="addSave">Add Part</button></div>
 </div></div>
+
+<!-- ===== BUILD HISTORY MODAL ===== -->
+<div class="modal-bg" id="historyModalBg"><div class="modal" style="max-width:640px;">
+  <h2>&#x1F4CB; Build History</h2>
+  <div id="historyList" style="max-height:440px;overflow-y:auto;">
+    <div class="empty"><div class="big">&#x1F3D7;</div><div>No builds recorded yet.</div></div>
+  </div>
+  <div class="actions"><button class="btn btn-ghost" id="historyClose">Close</button></div>
+</div></div>
+
+<!-- ===== PURCHASE ORDERS MODAL ===== -->
+<div class="modal-bg" id="poModalBg"><div class="modal" style="max-width:660px;">
+  <h2>&#x1F6D2; Purchase Orders</h2>
+  <div class="tab-bar" id="poTabBar">
+    <button class="tab-btn active" data-potab="list">Open Orders</button>
+    <button class="tab-btn admin-only" data-potab="create">+ New Order</button>
+  </div>
+  <div id="poTabList">
+    <div id="poList"><div class="empty"><div class="big">&#x1F6D2;</div><div>No purchase orders yet.</div></div></div>
+  </div>
+  <div id="poTabCreate" style="display:none;">
+    <label>Part</label>
+    <select id="poPartSelect" style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px 10px;border-radius:6px;font-size:14px;"></select>
+    <label>Qty to Order</label><input id="poQty" type="number" min="1" value="1" />
+    <label>Vendor / Notes</label><input id="poNotes" type="text" placeholder="e.g. Order from Phoenix Contact - PO#1234" />
+    <div class="actions">
+      <button class="btn btn-ghost" id="poCancelCreate">Cancel</button>
+      <button class="btn btn-primary" id="poSaveBtn">Create Order</button>
+    </div>
+  </div>
+  <div class="actions" id="poMainActions"><button class="btn btn-ghost" id="poModalClose">Close</button></div>
+</div></div>
+
+<!-- ===== BARCODE SCAN MODAL ===== -->
+<div class="modal-bg" id="scanModalBg"><div class="modal" style="max-width:420px;">
+  <h2>&#x1F4F7; Scan Barcode / QR</h2>
+  <p style="font-size:12px;color:#94a3b8;margin:0 0 12px;">Point camera at a barcode or QR code on a part label. The matching part will be highlighted in the inventory table.</p>
+  <div id="scanReader" style="border-radius:8px;overflow:hidden;"></div>
+  <div id="scanResultBox" style="display:none;" class="scan-result-box">
+    <div class="sr-label">Matched Part</div>
+    <div class="sr-name" id="srName"></div>
+    <div class="sr-meta" id="srMeta"></div>
+  </div>
+  <div id="scanNoMatch" style="display:none;color:#f87171;font-size:13px;margin-top:10px;"></div>
+  <div class="actions"><button class="btn btn-ghost" id="scanClose">Close Scanner</button></div>
+</div></div>
+
+<!-- ===== CSV IMPORT MODAL ===== -->
+<div class="modal-bg" id="importModalBg" style="z-index:110;"><div class="modal" style="max-width:520px;">
+  <h2>&#x2B06; Import Parts from CSV</h2>
+  <div class="import-instructions">
+    Expected CSV columns (case-insensitive, any order):<br/>
+    <code>Description</code> &middot; <code>Company</code> &middot; <code>Part Number</code> &middot; <code>Req/SSC</code> &middot; <code>Stock</code> &middot; <code>Unit Price</code> &middot; <code>Mode</code><br/><br/>
+    Export from Excel: <em>File &rarr; Save As &rarr; CSV (Comma delimited)</em>.<br/>
+    Parts with a matching Part # will be <strong>updated</strong>; others will be <strong>added</strong>.
+  </div>
+  <label>Select CSV File</label>
+  <input id="importFilePicker" type="file" accept=".csv,.txt" style="background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px;border-radius:6px;font-size:13px;width:100%;" />
+  <div id="importPreview" style="margin-top:10px;font-size:12px;color:#94a3b8;min-height:20px;"></div>
+  <div class="actions">
+    <button class="btn btn-ghost" id="importCancel">Cancel</button>
+    <button class="btn btn-primary" id="importConfirm" disabled>Import</button>
+  </div>
+</div></div>
+
 <div class="toast" id="toast"></div>
+
 <script>
 /* ========== FIREBASE CONFIG ========== */
 const firebaseConfig = {
@@ -196,6 +345,7 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const auth = firebase.auth();
 
 /* ========== APP CHECK ========== */
 var appCheckReady = false;
@@ -212,7 +362,7 @@ function bootAppCheck() {
     firebase.appCheck().getToken(false)
       .then(function(r){
         console.log("[AppCheck] token len:", (r&&r.token||"").length);
-        setTimeout(function(){ appCheckReady=true; setSync("live","App Check OK - connecting..."); initFirestoreSync(); }, 600);
+        setTimeout(function(){ appCheckReady=true; setSync("live","App Check OK - connecting..."); tryInitFirestoreSync(); }, 600);
       })
       .catch(function(err){
         console.error("[AppCheck] getToken failed:", err);
@@ -234,6 +384,88 @@ function bootAppCheck() {
     showToast("App Check failed to initialize.","error");
   }
 }
+
+/* ========== AUTH ========== */
+var currentUser = null;
+var userRole = "viewer";
+
+auth.onAuthStateChanged(function(user) {
+  if (user) {
+    currentUser = user;
+    $("loginModalBg").classList.remove("show");
+    $("loginErr").style.display = "none";
+    db.collection("userRoles").doc(user.uid).get()
+      .then(function(doc) {
+        if (doc.exists) {
+          userRole = doc.data().role || "viewer";
+          updateAuthUI();
+          tryInitFirestoreSync();
+        } else {
+          /* First-time sign-in: check if any roles exist; if none, this user is admin */
+          db.collection("userRoles").limit(1).get()
+            .then(function(snap) {
+              userRole = snap.empty ? "admin" : "viewer";
+              db.collection("userRoles").doc(user.uid).set({ role: userRole, email: user.email });
+              updateAuthUI();
+              tryInitFirestoreSync();
+            })
+            .catch(function() { userRole = "viewer"; updateAuthUI(); tryInitFirestoreSync(); });
+        }
+      })
+      .catch(function() { userRole = "viewer"; updateAuthUI(); tryInitFirestoreSync(); });
+  } else {
+    currentUser = null;
+    userRole = "viewer";
+    $("loginModalBg").classList.add("show");
+    $("userPill").style.display = "none";
+    updateAuthUI();
+  }
+});
+
+function tryInitFirestoreSync() {
+  if (appCheckReady && currentUser) initFirestoreSync();
+}
+
+function updateAuthUI() {
+  document.querySelectorAll(".admin-only").forEach(function(el) {
+    el.style.display = userRole === "admin" ? "" : "none";
+  });
+  if (currentUser) {
+    $("userEmail").textContent = currentUser.email;
+    $("userRoleBadge").textContent = userRole;
+    $("userRoleBadge").className = "role-badge " + userRole;
+    $("userPill").style.display = "flex";
+  }
+}
+
+function doSignIn() {
+  var email = $("loginEmail").value.trim();
+  var pw = $("loginPassword").value;
+  if (!email || !pw) { showLoginErr("Email and password are required."); return; }
+  $("loginBtn").disabled = true;
+  $("loginErr").style.display = "none";
+  auth.signInWithEmailAndPassword(email, pw)
+    .catch(function(e) { showLoginErr(e.message); $("loginBtn").disabled = false; });
+}
+
+function doRegister() {
+  var email = $("regEmail").value.trim();
+  var pw = $("regPassword").value;
+  if (!email || !pw) { showLoginErr("Email and password are required."); return; }
+  if (pw.length < 6) { showLoginErr("Password must be at least 6 characters."); return; }
+  $("registerBtn").disabled = true;
+  $("loginErr").style.display = "none";
+  auth.createUserWithEmailAndPassword(email, pw)
+    .then(function() { showToast("Account created \u2014 welcome!", "success"); })
+    .catch(function(e) { showLoginErr(e.message); $("registerBtn").disabled = false; });
+}
+
+function showLoginErr(msg) {
+  var el = $("loginErr");
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
 /* ========== FULL BOM ========== */
 var INITIAL_PARTS=[
 {id:"1",sn:1,name:'HMI 12" (SSC)',company:"Beijer",partNumber:"X2 Extreme 12",min:1,stock:0,unitPrice:3000,mode:"production"},
@@ -289,12 +521,20 @@ var INITIAL_PARTS=[
 {id:"51",sn:51,name:'Konnect-It Marking Tag, 5x5mm, Single Character "S" (Pack of 250)',company:"Automation Direct",partNumber:"KN-L5-S-250",min:1,stock:0,unitPrice:16,mode:"production"},
 {id:"52",sn:52,name:"Konnect-It Marking Tag, 5x5mm, Numbered 1-10 (Pack of 500)",company:"Automation Direct",partNumber:"KN-L5-1-10",min:15,stock:0,unitPrice:32,mode:"production"}
 ];
+
 /* ========== STATE ========== */
 var parts=[],mode="production",statusFilter="all",searchTerm="",sortKey="sn",sortDir="asc",seeded=false;
+var html5QrcodeScanner=null;
+var importParsedRows=[];
 
 /* ========== HELPERS ========== */
 function $(id){return document.getElementById(id);}
 function fmtMoney(n){if(!isFinite(n))return "$0.00";return "$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtDate(ts){
+  if(!ts)return"--";
+  var d=ts.toDate?ts.toDate():new Date(ts);
+  return d.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
+}
 /* FIX: was "s < m  2" - restored missing * multiplication operator */
 function statusOf(p){var s=+p.stock||0,m=+p.min||1;if(s<=0)return"out";if(s<m)return"low";if(s<m*2)return"warn";return"ok";}
 function statusLabel(s){return{out:"Out",low:"Low",warn:"Reorder",ok:"OK"}[s]||s;}
@@ -305,7 +545,7 @@ function escapeHTML(s){return String(s).replace(/[&<>"']/g,function(c){return({"
 /* ========== FIRESTORE SYNC ========== */
 var unsubscribe=null;
 function initFirestoreSync(){
-  if(!appCheckReady){console.warn("[Firestore] blocked: App Check not ready");return;}
+  if(!appCheckReady||!currentUser){return;}
   if(unsubscribe)return;
   setSync("","Connecting...");
   unsubscribe=db.collection("parts").onSnapshot(
@@ -355,6 +595,11 @@ function render(){
   $("kpiValue").textContent=fmtMoney(totalValue);
   $("buildBtn").disabled=buildCap<=0;
 
+  /* Low stock alert badge in header */
+  var alertEl=$("lowStockAlert");
+  if(lowAll>0){$("lowAlertCount").textContent=lowAll;alertEl.style.display="inline-flex";}
+  else{alertEl.style.display="none";}
+
   var dir=sortDir==="asc"?1:-1;
   var sorted=visible.slice().sort(function(a,b){
     var av,bv;
@@ -379,10 +624,11 @@ function render(){
     var lineVal=p.stock*p.unitPrice;
     var tr=document.createElement("tr");
     tr.className="row-"+s;
+    tr.dataset.partid=p.id;
     tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td>';
     tbody.appendChild(tr);
 
-    var card=document.createElement("div");card.className="mobile-card";
+    var card=document.createElement("div");card.className="mobile-card";card.dataset.partid=p.id;
     card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div><\/div>';
     mlist.appendChild(card);
   });
@@ -393,6 +639,7 @@ function render(){
 
 /* ========== ACTIONS ========== */
 function updateStock(id,value){db.collection("parts").doc(id).update({stock:value}).catch(function(e){showToast("Update failed: "+e.message,"error");});}
+
 function buildOneSSC(){
   var prod=parts.filter(function(p){return p.mode==="production";});
   var cap=prod.length?Math.min.apply(null,prod.map(function(p){return Math.floor(p.stock/Math.max(1,p.min));})):0;
@@ -400,14 +647,312 @@ function buildOneSSC(){
   if(!confirm("Build 1 SSC unit?\n\nThis will deduct the per-SSC quantity from "+prod.length+" parts."))return;
   var batch=db.batch();
   prod.forEach(function(p){batch.update(db.collection("parts").doc(p.id),{stock:Math.max(0,p.stock-p.min)});});
+  /* Log to build history */
+  var histRef=db.collection("buildHistory").doc();
+  batch.set(histRef,{
+    id:histRef.id,
+    timestamp:firebase.firestore.FieldValue.serverTimestamp(),
+    builtBy:currentUser?currentUser.email:"unknown",
+    partsUsed:prod.map(function(p){return{id:p.id,name:p.name,partNumber:p.partNumber,qty:p.min};}),
+    partCount:prod.length
+  });
   batch.commit().then(function(){showToast("1 SSC built - stock decremented","success");}).catch(function(e){showToast("Build failed: "+e.message,"error");});
 }
+
 function reseedBOM(){
   if(!confirm("WARNING: This will OVERWRITE every part with the master BOM.\n\nAll current stock counts will be RESET.\n\nContinue?"))return;
   if(!confirm("Are you absolutely sure? This cannot be undone."))return;
   var batch=db.batch();
   INITIAL_PARTS.forEach(function(p){batch.set(db.collection("parts").doc(p.id),p);});
   batch.commit().then(function(){showToast("Full BOM uploaded ("+INITIAL_PARTS.length+" parts)","success");}).catch(function(e){showToast("Reseed failed: "+e.message,"error");});
+}
+
+/* ========== BUILD HISTORY ========== */
+function openHistoryModal(){
+  $("historyModalBg").classList.add("show");
+  loadBuildHistory();
+}
+
+function loadBuildHistory(){
+  var container=$("historyList");
+  container.innerHTML='<div style="color:#64748b;font-size:13px;padding:20px;">Loading...</div>';
+  db.collection("buildHistory").orderBy("timestamp","desc").limit(50).get()
+    .then(function(snap){
+      if(snap.empty){
+        container.innerHTML='<div class="empty"><div class="big">&#x1F3D7;<\/div><div>No builds recorded yet.<\/div><\/div>';
+        return;
+      }
+      var html="";
+      snap.forEach(function(doc){
+        var d=doc.data();
+        var ts=fmtDate(d.timestamp);
+        var partsHtml="";
+        if(d.partsUsed&&d.partsUsed.length){
+          partsHtml=d.partsUsed.slice(0,5).map(function(p){return escapeHTML(p.name)+" (\u00d7"+p.qty+")"}).join("<br/>");
+          if(d.partsUsed.length>5)partsHtml+="<br/>\u2026and "+(d.partsUsed.length-5)+" more parts";
+        }
+        html+='<div class="history-item"><div class="hist-header"><span style="font-weight:700;color:#fdba74;">1 SSC Built<\/span><span class="hist-time">'+escapeHTML(ts)+'<\/span><\/div><div class="hist-user">By: '+escapeHTML(d.builtBy||"unknown")+'<\/div>'+(partsHtml?'<div class="hist-parts">'+partsHtml+'<\/div>':'')+'<\/div>';
+      });
+      container.innerHTML=html;
+    })
+    .catch(function(e){container.innerHTML='<div style="color:#f87171;padding:16px;">Failed to load: '+escapeHTML(e.message)+'<\/div>';});
+}
+
+/* ========== PURCHASE ORDERS ========== */
+var currentPOTab="list";
+
+function openPOModal(){
+  $("poModalBg").classList.add("show");
+  switchPOTab("list");
+  loadPOs();
+  populatePOPartSelect();
+}
+
+function switchPOTab(tab){
+  currentPOTab=tab;
+  document.querySelectorAll("#poTabBar .tab-btn").forEach(function(b){b.classList.toggle("active",b.dataset.potab===tab);});
+  $("poTabList").style.display=tab==="list"?"block":"none";
+  $("poTabCreate").style.display=tab==="create"?"block":"none";
+  $("poMainActions").style.display=tab==="list"?"flex":"none";
+}
+
+function populatePOPartSelect(){
+  var sel=$("poPartSelect");
+  sel.innerHTML="";
+  parts.slice().sort(function(a,b){return a.sn-b.sn;}).forEach(function(p){
+    var opt=document.createElement("option");
+    opt.value=p.id;
+    opt.textContent="#"+p.sn+" - "+(p.name.length>48?p.name.slice(0,48)+"\u2026":p.name)+" ("+p.partNumber+")";
+    sel.appendChild(opt);
+  });
+}
+
+function loadPOs(){
+  var container=$("poList");
+  container.innerHTML='<div style="color:#64748b;font-size:13px;padding:20px;">Loading...</div>';
+  db.collection("purchaseOrders").orderBy("createdAt","desc").limit(100).get()
+    .then(function(snap){
+      if(snap.empty){
+        container.innerHTML='<div class="empty"><div class="big">&#x1F6D2;<\/div><div>No purchase orders yet.<\/div><\/div>';
+        return;
+      }
+      container.innerHTML="";
+      snap.forEach(function(doc){
+        var d=doc.data();
+        var ts=fmtDate(d.createdAt);
+        var st=d.status||"pending";
+        var item=document.createElement("div");
+        item.className="po-item";
+        item.dataset.poid=d.id;
+        item.dataset.partid=d.partId||"";
+        item.dataset.qty=d.qty||0;
+        item.dataset.status=st;
+        var actionsHtml="";
+        if(userRole==="admin"){
+          if(st==="pending")actionsHtml+='<button class="btn btn-ghost po-action" style="padding:4px 10px;font-size:11px;" data-action="order">Mark Ordered<\/button>';
+          if(st==="ordered")actionsHtml+='<button class="btn btn-success po-action" style="padding:4px 10px;font-size:11px;" data-action="receive">Mark Received (+stock)<\/button>';
+          if(st!=="received")actionsHtml+='<button class="btn btn-danger po-action" style="padding:4px 10px;font-size:11px;" data-action="delete">Delete<\/button>';
+        }
+        item.innerHTML='<div class="po-header"><div class="po-name">'+escapeHTML(d.partName||"-")+'<\/div><span class="badge '+escapeHTML(st)+'">'+escapeHTML(st)+'<\/span><\/div><div class="po-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 Qty: <strong>'+d.qty+'<\/strong> \u00b7 '+escapeHTML(ts)+'<\/div>'+(d.notes?'<div class="po-meta">'+escapeHTML(d.notes)+'<\/div>':'')+'<div class="po-actions">'+actionsHtml+'<\/div>';
+        container.appendChild(item);
+      });
+    })
+    .catch(function(e){container.innerHTML='<div style="color:#f87171;padding:16px;">Failed to load: '+escapeHTML(e.message)+'<\/div>';});
+}
+
+function createPO(){
+  var partId=$("poPartSelect").value;
+  var qty=parseInt($("poQty").value,10)||1;
+  var notes=$("poNotes").value.trim();
+  var part=parts.find(function(p){return p.id===partId;});
+  if(!part){showToast("Select a part","error");return;}
+  if(qty<1){showToast("Qty must be at least 1","error");return;}
+  var ref=db.collection("purchaseOrders").doc();
+  ref.set({
+    id:ref.id,
+    partId:part.id,
+    partName:part.name,
+    partNumber:part.partNumber,
+    qty:qty,
+    status:"pending",
+    notes:notes,
+    createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    createdBy:currentUser?currentUser.email:"unknown"
+  }).then(function(){
+    showToast("Purchase order created","success");
+    $("poQty").value=1;$("poNotes").value="";
+    switchPOTab("list");loadPOs();
+  }).catch(function(e){showToast("Failed: "+e.message,"error");});
+}
+
+function updatePOStatus(id,status){
+  db.collection("purchaseOrders").doc(id).update({status:status,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    .then(function(){showToast("Order marked as "+status,"success");loadPOs();})
+    .catch(function(e){showToast("Failed: "+e.message,"error");});
+}
+
+function receivePO(id,partId,qty){
+  if(!confirm("Mark order as Received and add "+qty+" unit(s) to stock?"))return;
+  var part=parts.find(function(p){return p.id===partId;});
+  var batch=db.batch();
+  batch.update(db.collection("purchaseOrders").doc(id),{status:"received",updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+  if(part)batch.update(db.collection("parts").doc(partId),{stock:part.stock+qty});
+  batch.commit()
+    .then(function(){showToast("Order received \u2014 stock updated","success");loadPOs();})
+    .catch(function(e){showToast("Failed: "+e.message,"error");});
+}
+
+function deletePO(id){
+  if(!confirm("Delete this purchase order?"))return;
+  db.collection("purchaseOrders").doc(id).delete()
+    .then(function(){showToast("Order deleted","success");loadPOs();})
+    .catch(function(e){showToast("Failed: "+e.message,"error");});
+}
+
+/* ========== CSV IMPORT ========== */
+function openImportModal(){
+  $("importFilePicker").value="";
+  $("importPreview").textContent="";
+  $("importConfirm").disabled=true;
+  importParsedRows=[];
+  $("importModalBg").classList.add("show");
+}
+
+function handleImportFile(file){
+  if(!file)return;
+  /* Dangerous prototype keys that must never be used as property names */
+  var FORBIDDEN_KEYS=new Set(["__proto__","constructor","prototype"]);
+  Papa.parse(file,{
+    header:true,
+    skipEmptyLines:true,
+    complete:function(res){
+      importParsedRows=[];
+      var errors=[];
+      /* Build a safe, lowercase key lookup from the first row */
+      var safeKeys={};
+      if(res.data.length>0){
+        Object.keys(res.data[0]).forEach(function(k){
+          var lk=k.toLowerCase().trim();
+          if(!FORBIDDEN_KEYS.has(lk))safeKeys[lk]=k;
+        });
+      }
+      res.data.forEach(function(row,i){
+        function getCol(names){
+          for(var n=0;n<names.length;n++){
+            var origKey=safeKeys[names[n]];
+            if(origKey!==undefined){var v=(row[origKey]||"").toString().trim();if(v)return v;}
+          }
+          return"";
+        }
+        var name=getCol(["description","name","item","part description"]);
+        var company=getCol(["company","vendor","supplier","manufacturer"]);
+        var partNumber=getCol(["part number","part#","partnumber","part no","pn"]);
+        var minStr=getCol(["req/ssc","req per ssc","min","qty per ssc","required","qty required"]);
+        var stockStr=getCol(["stock","initial stock","current stock","qty on hand","on hand"]);
+        var priceStr=getCol(["unit price","unit$","price","unit cost","cost"]);
+        var modeStr=getCol(["mode","type"]);
+        if(!name){errors.push("Row "+(i+2)+": missing Description");return;}
+        importParsedRows.push({
+          name:name,
+          company:company||"-",
+          partNumber:partNumber||"-",
+          min:Math.max(1,parseInt(minStr,10)||1),
+          stock:Math.max(0,parseInt(stockStr,10)||0),
+          unitPrice:Math.max(0,parseFloat(priceStr)||0),
+          mode:modeStr.toLowerCase()==="spare"?"spare":"production"
+        });
+      });
+      var msg="";
+      if(importParsedRows.length>0)msg=importParsedRows.length+" row(s) ready to import.";
+      if(errors.length>0)msg+=(msg?" ":"")+errors.slice(0,3).join("; ")+(errors.length>3?" (+"+(errors.length-3)+" more)":"");
+      $("importPreview").textContent=msg||"No valid rows found.";
+      $("importConfirm").disabled=importParsedRows.length===0;
+    },
+    error:function(e){$("importPreview").textContent="Parse error: "+e.message;$("importConfirm").disabled=true;}
+  });
+}
+
+function doImport(){
+  if(!importParsedRows.length)return;
+  $("importConfirm").disabled=true;
+  var maxSn=parts.reduce(function(m,p){return Math.max(m,+p.sn||0);},0);
+  /* Build a part-number index for O(1) lookup during import */
+  var partIndex={};
+  parts.forEach(function(p){if(p.partNumber&&p.partNumber!=="-")partIndex[p.partNumber.toLowerCase()]=p;});
+  var batch=db.batch();
+  var added=0,updated=0;
+  importParsedRows.forEach(function(row){
+    var existing=row.partNumber!=="-"?partIndex[row.partNumber.toLowerCase()]:null;
+    if(existing){
+      batch.update(db.collection("parts").doc(existing.id),{name:row.name,company:row.company,min:row.min,stock:row.stock,unitPrice:row.unitPrice,mode:row.mode});
+      updated++;
+    } else {
+      var ref=db.collection("parts").doc();
+      batch.set(ref,{id:ref.id,sn:++maxSn,name:row.name,company:row.company,partNumber:row.partNumber,min:row.min,stock:row.stock,unitPrice:row.unitPrice,mode:row.mode});
+      added++;
+    }
+  });
+  batch.commit()
+    .then(function(){showToast("Imported: "+added+" added, "+updated+" updated","success");$("importModalBg").classList.remove("show");})
+    .catch(function(e){showToast("Import failed: "+e.message,"error");$("importConfirm").disabled=false;});
+}
+
+/* ========== BARCODE SCAN ========== */
+function openScanModal(){
+  $("scanModalBg").classList.add("show");
+  $("scanResultBox").style.display="none";
+  $("scanNoMatch").style.display="none";
+  startScanner();
+}
+
+function startScanner(){
+  if(html5QrcodeScanner)return;
+  html5QrcodeScanner=new Html5Qrcode("scanReader");
+  html5QrcodeScanner.start(
+    {facingMode:"environment"},
+    {fps:10,qrbox:{width:250,height:150}},
+    function(decodedText){ handleScanResult(decodedText); },
+    function(){}
+  ).catch(function(e){
+    $("scanNoMatch").textContent="Camera unavailable: "+(e.message||String(e));
+    $("scanNoMatch").style.display="block";
+  });
+}
+
+function stopScanner(){
+  if(html5QrcodeScanner){
+    html5QrcodeScanner.stop().catch(function(){}).finally(function(){
+      try{html5QrcodeScanner.clear();}catch(e){}
+      html5QrcodeScanner=null;
+      $("scanReader").innerHTML="";
+    });
+  }
+}
+
+function handleScanResult(code){
+  var match=parts.find(function(p){
+    return p.partNumber.toLowerCase()===code.toLowerCase()||p.id===code;
+  });
+  if(match){
+    $("srName").textContent=match.name;
+    $("srMeta").textContent="Part #: "+match.partNumber+" \u00b7 Stock: "+match.stock+" \u00b7 "+match.company;
+    $("scanResultBox").style.display="block";
+    $("scanNoMatch").style.display="none";
+    highlightPart(match.id);
+  } else {
+    $("scanResultBox").style.display="none";
+    $("scanNoMatch").textContent="No part found for scanned code: "+code;
+    $("scanNoMatch").style.display="block";
+  }
+}
+
+function highlightPart(partId){
+  document.querySelectorAll(".row-highlight").forEach(function(el){el.classList.remove("row-highlight");});
+  var tr=document.querySelector("tr[data-partid='"+partId+"']");
+  if(tr){tr.classList.add("row-highlight");tr.scrollIntoView({behavior:"smooth",block:"center"});}
+  var card=document.querySelector(".mobile-card[data-partid='"+partId+"']");
+  if(card){card.classList.add("row-highlight");card.scrollIntoView({behavior:"smooth",block:"center"});}
 }
 
 /* ========== UI WIRING ========== */
@@ -420,6 +965,8 @@ $("searchInput").addEventListener("input",function(e){searchTerm=e.target.value;
 document.querySelectorAll("thead th").forEach(function(th){th.addEventListener("click",function(){var k=th.dataset.sort;if(!k)return;if(sortKey===k)sortDir=sortDir==="asc"?"desc":"asc";else{sortKey=k;sortDir="asc";}render();});});
 $("buildBtn").addEventListener("click",buildOneSSC);
 $("reseedBtn").addEventListener("click",reseedBOM);
+
+/* Add Part */
 $("addBtn").addEventListener("click",function(){["newName","newCompany","newPN"].forEach(function(id){$(id).value="";});$("newMin").value=1;$("newStock").value=0;$("newPrice").value=0;$("newMode").value="production";$("addModalBg").classList.add("show");$("newName").focus();});
 $("addCancel").addEventListener("click",function(){$("addModalBg").classList.remove("show");});
 $("addModalBg").addEventListener("click",function(e){if(e.target.id==="addModalBg")$("addModalBg").classList.remove("show");});
@@ -428,10 +975,69 @@ $("addSave").addEventListener("click",function(){
   var min=parseInt($("newMin").value,10);
   if(!name){showToast("Description is required","error");return;}
   if(!min||min<1){showToast("Qty must be >= 1","error");return;}
-  var id=Date.now().toString();
+  var ref=db.collection("parts").doc();
   var maxSn=parts.reduce(function(m,p){return Math.max(m,+p.sn||0);},0);
-  var doc={id:id,sn:maxSn+1,name:name,company:$("newCompany").value.trim()||"-",partNumber:$("newPN").value.trim()||"-",min:min,stock:parseInt($("newStock").value,10)||0,unitPrice:parseFloat($("newPrice").value)||0,mode:$("newMode").value};
-  db.collection("parts").doc(id).set(doc).then(function(){$("addModalBg").classList.remove("show");showToast("Part added","success");}).catch(function(e){showToast("Add failed: "+e.message,"error");});
+  var doc={id:ref.id,sn:maxSn+1,name:name,company:$("newCompany").value.trim()||"-",partNumber:$("newPN").value.trim()||"-",min:min,stock:parseInt($("newStock").value,10)||0,unitPrice:parseFloat($("newPrice").value)||0,mode:$("newMode").value};
+  ref.set(doc).then(function(){$("addModalBg").classList.remove("show");showToast("Part added","success");}).catch(function(e){showToast("Add failed: "+e.message,"error");});
+});
+
+/* Build History */
+$("historyBtn").addEventListener("click",openHistoryModal);
+$("historyClose").addEventListener("click",function(){$("historyModalBg").classList.remove("show");});
+$("historyModalBg").addEventListener("click",function(e){if(e.target.id==="historyModalBg")$("historyModalBg").classList.remove("show");});
+
+/* Purchase Orders */
+$("poBtn").addEventListener("click",openPOModal);
+$("poModalClose").addEventListener("click",function(){$("poModalBg").classList.remove("show");});
+$("poModalBg").addEventListener("click",function(e){if(e.target.id==="poModalBg")$("poModalBg").classList.remove("show");});
+$("poTabBar").addEventListener("click",function(e){var b=e.target.closest(".tab-btn");if(!b||!b.dataset.potab)return;switchPOTab(b.dataset.potab);});
+$("poCancelCreate").addEventListener("click",function(){switchPOTab("list");});
+$("poSaveBtn").addEventListener("click",createPO);
+/* PO action delegation - eliminates inline onclick handlers */
+$("poList").addEventListener("click",function(e){
+  var btn=e.target.closest(".po-action");
+  if(!btn)return;
+  var item=btn.closest(".po-item");
+  if(!item)return;
+  var id=item.dataset.poid;
+  var action=btn.dataset.action;
+  if(action==="order")updatePOStatus(id,"ordered");
+  else if(action==="receive")receivePO(id,item.dataset.partid,parseInt(item.dataset.qty,10)||0);
+  else if(action==="delete")deletePO(id);
+});
+
+/* CSV Import */
+$("importBtn").addEventListener("click",openImportModal);
+$("importCancel").addEventListener("click",function(){$("importModalBg").classList.remove("show");});
+$("importModalBg").addEventListener("click",function(e){if(e.target.id==="importModalBg")$("importModalBg").classList.remove("show");});
+$("importFilePicker").addEventListener("change",function(e){handleImportFile(e.target.files[0]);});
+$("importConfirm").addEventListener("click",doImport);
+
+/* Barcode Scan */
+$("scanBtn").addEventListener("click",openScanModal);
+$("scanClose").addEventListener("click",function(){stopScanner();$("scanModalBg").classList.remove("show");});
+$("scanModalBg").addEventListener("click",function(e){if(e.target.id==="scanModalBg"){stopScanner();$("scanModalBg").classList.remove("show");}});
+
+/* Auth */
+$("loginBtn").addEventListener("click",doSignIn);
+$("loginPassword").addEventListener("keydown",function(e){if(e.key==="Enter")doSignIn();});
+$("registerBtn").addEventListener("click",doRegister);
+$("regPassword").addEventListener("keydown",function(e){if(e.key==="Enter")doRegister();});
+$("signOutBtn").addEventListener("click",function(){
+  auth.signOut();
+  if(unsubscribe){unsubscribe();unsubscribe=null;}
+  parts=[];seeded=false;
+  $("tbody").innerHTML="";
+  $("mobileList").innerHTML="";
+});
+$("authTabBar").addEventListener("click",function(e){
+  var b=e.target.closest(".tab-btn");if(!b||!b.dataset.authtab)return;
+  document.querySelectorAll("#authTabBar .tab-btn").forEach(function(x){x.classList.remove("active");});
+  b.classList.add("active");
+  var tab=b.dataset.authtab;
+  $("authTabSignin").style.display=tab==="signin"?"block":"none";
+  $("authTabSignup").style.display=tab==="signup"?"block":"none";
+  $("loginErr").style.display="none";
 });
 
 setSync("","Connecting...");
