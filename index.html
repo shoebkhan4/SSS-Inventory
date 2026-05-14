@@ -6,27 +6,24 @@
 <meta name="theme-color" content="#0f172a" />
 <title>SSC Industrial Inventory</title>
 
-<!-- Firebase compat SDK (loaded from CDN; degrades gracefully offline) -->
+<!-- IMPORTANT: For local testing, uncomment the next line BEFORE the Firebase scripts -->
+<!-- <script>self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;</script> -->
+
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
 
 <style>
-  /* ---------- Reset & base ---------- */
-  *, *::before, *::after { box-sizing: border-box; }
+  *,*::before,*::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, system-ui, sans-serif;
-    background: #0b1220;
-    color: #e5e7eb;
-    min-height: 100vh;
-    -webkit-font-smoothing: antialiased;
-    line-height: 1.4;
+    background: #0b1220; color: #e5e7eb; min-height: 100vh;
+    -webkit-font-smoothing: antialiased; line-height: 1.4;
   }
   button { font-family: inherit; cursor: pointer; }
   input, select { font-family: inherit; }
 
-  /* ---------- Header ---------- */
   .top {
     position: sticky; top: 0; z-index: 50;
     background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
@@ -43,10 +40,7 @@
     font-weight: 800; color: white; letter-spacing: .5px;
     box-shadow: 0 4px 14px rgba(249,115,22,.35);
   }
-  .brand h1 {
-    margin: 0; font-size: 16px; font-weight: 700; letter-spacing: .3px;
-    color: #f8fafc;
-  }
+  .brand h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: .3px; color: #f8fafc; }
   .brand .sub { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1.5px; }
 
   .mode-switch {
@@ -58,33 +52,21 @@
     padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
     transition: all .15s;
   }
-  .mode-switch button.active {
-    background: #f97316; color: white; box-shadow: 0 2px 8px rgba(249,115,22,.4);
-  }
+  .mode-switch button.active { background: #f97316; color: white; box-shadow: 0 2px 8px rgba(249,115,22,.4); }
 
-  .sync {
-    font-size: 12px; color: #94a3b8; display: inline-flex; align-items: center; gap: 6px;
-  }
-  .dot {
-    width: 8px; height: 8px; border-radius: 50%; background: #64748b;
-    box-shadow: 0 0 0 0 rgba(34,197,94,0);
-  }
+  .sync { font-size: 12px; color: #94a3b8; display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
   .dot.live { background: #22c55e; animation: pulse 2s infinite; }
-  .dot.err { background: #ef4444; }
+  .dot.err  { background: #ef4444; }
   @keyframes pulse {
     0%   { box-shadow: 0 0 0 0 rgba(34,197,94,.5); }
     70%  { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
     100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
   }
 
-  /* ---------- Layout ---------- */
   .wrap { max-width: 1400px; margin: 0 auto; padding: 20px; }
 
-  /* ---------- KPI cards ---------- */
-  .kpis {
-    display: grid; gap: 12px; margin-bottom: 18px;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  }
+  .kpis { display: grid; gap: 12px; margin-bottom: 18px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
   .kpi {
     background: #111827; border: 1px solid #1f2937;
     border-radius: 12px; padding: 14px 16px;
@@ -97,9 +79,8 @@
   .kpi .hint  { font-size: 11px; color: #64748b; margin-top: 2px; min-height: 14px; }
   .kpi.accent { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-color: #f97316; }
   .kpi.accent .value { color: #fdba74; }
-  .kpi.danger .value { color: #f87171; }
+  .kpi.danger  .value { color: #f87171; }
   .kpi.success .value { color: #4ade80; }
-
   .kpi .build-btn {
     margin-top: 10px;
     background: #16a34a; color: white; border: 0; border-radius: 8px;
@@ -110,14 +91,8 @@
   .kpi .build-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(22,163,74,.45); }
   .kpi .build-btn:disabled { background: #374151; box-shadow: none; cursor: not-allowed; opacity: .6; }
 
-  /* ---------- Toolbar ---------- */
-  .toolbar {
-    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
-    margin-bottom: 14px;
-  }
-  .search {
-    flex: 1 1 260px; min-width: 200px; position: relative;
-  }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .search { flex: 1 1 260px; min-width: 200px; position: relative; }
   .search input {
     width: 100%; background: #111827; border: 1px solid #1f2937; color: #e5e7eb;
     padding: 9px 12px 9px 34px; border-radius: 8px; font-size: 14px;
@@ -128,36 +103,23 @@
     content: "⌕"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
     color: #64748b; font-size: 16px; pointer-events: none;
   }
+
   .filter-pills { display: inline-flex; gap: 4px; background: #111827; padding: 3px; border-radius: 8px; border: 1px solid #1f2937; }
-  .filter-pills button {
-    border: 0; background: transparent; color: #cbd5e1;
-    padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
-  }
+  .filter-pills button { border: 0; background: transparent; color: #cbd5e1; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; }
   .filter-pills button.active { background: #1e293b; color: #fdba74; }
-  .filter-pills .count {
-    margin-left: 6px; font-size: 10px; padding: 1px 6px; border-radius: 999px;
-    background: #1f2937; color: #94a3b8;
-  }
+  .filter-pills .count { margin-left: 6px; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: #1f2937; color: #94a3b8; }
   .filter-pills button.active .count { background: #f97316; color: #0b1220; }
 
-  .btn {
-    border: 0; border-radius: 8px; padding: 9px 14px; font-size: 13px; font-weight: 600;
-    color: white; transition: filter .15s, transform .1s;
-  }
+  .btn { border: 0; border-radius: 8px; padding: 9px 14px; font-size: 13px; font-weight: 600; color: white; transition: filter .15s, transform .1s; }
   .btn:hover { filter: brightness(1.1); }
   .btn:active { transform: translateY(1px); }
   .btn-primary { background: #2563eb; }
   .btn-warn    { background: #b45309; }
   .btn-ghost   { background: #1e293b; border: 1px solid #334155; color: #cbd5e1; }
 
-  /* ---------- Table ---------- */
-  .card-wrap {
-    background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; overflow: hidden;
-  }
+  .card-wrap { background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; overflow: hidden; }
   .table-scroll { overflow-x: auto; }
-  table {
-    width: 100%; border-collapse: collapse; font-size: 13px; min-width: 980px;
-  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 980px; }
   thead th {
     background: #111827; color: #94a3b8; text-transform: uppercase; letter-spacing: .8px;
     font-size: 10.5px; font-weight: 700; text-align: left;
@@ -178,14 +140,12 @@
   td.num  { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
   td.price { font-variant-numeric: tabular-nums; text-align: right; color: #cbd5e1; white-space: nowrap; }
 
-  /* status row tints */
   tr.row-out  { background: rgba(220,38,38,.08); }
   tr.row-out:hover { background: rgba(220,38,38,.14); }
   tr.row-low  { background: rgba(234,88,12,.07); }
   tr.row-low:hover { background: rgba(234,88,12,.13); }
   tr.row-warn { background: rgba(202,138,4,.05); }
 
-  /* status badge */
   .badge {
     display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .8px;
     padding: 3px 8px; border-radius: 999px; text-transform: uppercase;
@@ -196,86 +156,45 @@
   .badge.low  { background: rgba(234,88,12,.15);  color: #fb923c; border-color: rgba(234,88,12,.3); }
   .badge.out  { background: rgba(220,38,38,.15);  color: #f87171; border-color: rgba(220,38,38,.3); }
 
-  /* stock controls */
-  .stock-ctrl {
-    display: inline-flex; align-items: center; gap: 4px;
-    background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 2px;
-  }
-  .stock-ctrl button {
-    width: 26px; height: 26px; border: 0; border-radius: 6px;
-    background: transparent; color: #cbd5e1; font-size: 16px; font-weight: 700;
-    transition: background .12s;
-  }
+  .stock-ctrl { display: inline-flex; align-items: center; gap: 4px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 2px; }
+  .stock-ctrl button { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #cbd5e1; font-size: 16px; font-weight: 700; transition: background .12s; }
   .stock-ctrl button:hover { background: #334155; color: white; }
-  .stock-ctrl input {
-    width: 56px; background: transparent; border: 0; color: #f1f5f9;
-    text-align: center; font-size: 13px; font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
+  .stock-ctrl input { width: 56px; background: transparent; border: 0; color: #f1f5f9; text-align: center; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .stock-ctrl input:focus { outline: none; }
 
-  /* ---------- Mobile cards ---------- */
   .mobile-list { display: none; }
-  .mobile-card {
-    background: #111827; border: 1px solid #1f2937; border-radius: 10px;
-    padding: 12px; margin-bottom: 10px;
-  }
+  .mobile-card { background: #111827; border: 1px solid #1f2937; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
   .mobile-card .row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
   .mobile-card .name { font-weight: 600; color: #f1f5f9; flex: 1; }
   .mobile-card .meta { font-size: 11px; color: #94a3b8; }
   .mobile-card .pn { font-family: ui-monospace, monospace; font-size: 11px; color: #cbd5e1; }
-  .mobile-card .footer {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-top: 8px; padding-top: 8px; border-top: 1px solid #1f2937;
-  }
+  .mobile-card .footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid #1f2937; }
 
-  /* ---------- Footer / status bar ---------- */
-  .empty {
-    padding: 60px 20px; text-align: center; color: #64748b;
-  }
+  .empty { padding: 60px 20px; text-align: center; color: #64748b; }
   .empty .big { font-size: 32px; margin-bottom: 6px; }
 
-  .footer-bar {
-    margin-top: 18px; padding: 14px;
-    display: flex; gap: 10px; flex-wrap: wrap; justify-content: space-between; align-items: center;
-    color: #64748b; font-size: 12px;
-  }
+  .footer-bar { margin-top: 18px; padding: 14px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: space-between; align-items: center; color: #64748b; font-size: 12px; }
 
-  /* ---------- Modal ---------- */
-  .modal-bg {
-    position: fixed; inset: 0; background: rgba(0,0,0,.65);
-    display: none; align-items: center; justify-content: center; z-index: 100;
-    backdrop-filter: blur(4px); padding: 20px;
-  }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); padding: 20px; }
   .modal-bg.show { display: flex; }
-  .modal {
-    background: #111827; border: 1px solid #334155; border-radius: 12px;
-    padding: 22px; width: 100%; max-width: 460px;
-    box-shadow: 0 20px 50px rgba(0,0,0,.5);
-  }
+  .modal { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 22px; width: 100%; max-width: 460px; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
   .modal h2 { margin: 0 0 14px 0; font-size: 17px; color: #f8fafc; }
   .modal label { display: block; font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; margin-top: 10px; }
-  .modal input, .modal select {
-    width: 100%; background: #0b1220; border: 1px solid #334155; color: #e5e7eb;
-    padding: 8px 10px; border-radius: 6px; font-size: 14px;
-  }
+  .modal input, .modal select { width: 100%; background: #0b1220; border: 1px solid #334155; color: #e5e7eb; padding: 8px 10px; border-radius: 6px; font-size: 14px; }
   .modal input:focus, .modal select:focus { outline: none; border-color: #f97316; }
   .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 
-  /* ---------- Toast ---------- */
   .toast {
     position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
     background: #1e293b; color: #f1f5f9; border: 1px solid #334155;
     padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 500;
     box-shadow: 0 10px 25px rgba(0,0,0,.4); opacity: 0;
-    transition: opacity .25s, transform .25s; z-index: 200;
-    max-width: 90%;
+    transition: opacity .25s, transform .25s; z-index: 200; max-width: 90%;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.success { border-color: #16a34a; }
-  .toast.error { border-color: #dc2626; }
+  .toast.error   { border-color: #dc2626; }
 
-  /* ---------- Responsive ---------- */
   @media (max-width: 760px) {
     .wrap { padding: 12px; }
     .top { padding: 10px 14px; }
@@ -297,19 +216,15 @@
       <div class="sub">Build &amp; spare parts management</div>
     </div>
   </div>
-
   <div class="mode-switch" role="tablist">
     <button id="modeProd" class="active" role="tab">Production</button>
     <button id="modeSpare" role="tab">Spare</button>
     <button id="modeAll"   role="tab">All</button>
   </div>
-
   <div class="sync"><span id="syncDot" class="dot"></span><span id="syncText">Connecting…</span></div>
 </header>
 
 <main class="wrap">
-
-  <!-- KPIs -->
   <section class="kpis">
     <div class="kpi accent">
       <div class="label">Build Capacity</div>
@@ -334,7 +249,6 @@
     </div>
   </section>
 
-  <!-- Toolbar -->
   <section class="toolbar">
     <div class="search">
       <input id="searchInput" type="search" placeholder="Search by description, part #, company…" autocomplete="off" />
@@ -349,18 +263,17 @@
     <button id="reseedBtn"  class="btn btn-warn">↻ Reseed Full BOM</button>
   </section>
 
-  <!-- Table (desktop) -->
   <section class="card-wrap">
     <div class="table-scroll">
       <table id="invTable">
         <thead>
           <tr>
-            <th data-sort="sn"    class="sn">SN</th>
-            <th data-sort="name"  class="desc">Description</th>
+            <th data-sort="sn"        class="sn">SN</th>
+            <th data-sort="name"      class="desc">Description</th>
             <th data-sort="company">Company</th>
             <th data-sort="partNumber">Part #</th>
-            <th data-sort="min"   class="num">Req / SSC</th>
-            <th data-sort="stock" class="num">Stock</th>
+            <th data-sort="min"       class="num">Req / SSC</th>
+            <th data-sort="stock"     class="num">Stock</th>
             <th data-sort="status">Status</th>
             <th data-sort="unitPrice" class="price">Unit $</th>
             <th data-sort="lineValue" class="price">Line $</th>
@@ -369,7 +282,6 @@
         <tbody id="tbody"></tbody>
       </table>
     </div>
-    <!-- Mobile cards -->
     <div class="mobile-list" id="mobileList"></div>
     <div id="emptyState" class="empty" style="display:none;">
       <div class="big">📦</div>
@@ -381,10 +293,8 @@
     <div>SSC Industrial Inventory · live‑sync via Firestore</div>
     <div id="lastUpdate"></div>
   </div>
-
 </main>
 
-<!-- Add Part Modal -->
 <div class="modal-bg" id="addModalBg">
   <div class="modal">
     <h2>Add New Part</h2>
@@ -406,7 +316,7 @@
       <option value="spare">Spare</option>
     </select>
     <div class="actions">
-      <button class="btn btn-ghost" id="addCancel">Cancel</button>
+      <button class="btn btn-ghost"   id="addCancel">Cancel</button>
       <button class="btn btn-primary" id="addSave">Add Part</button>
     </div>
   </div>
@@ -415,7 +325,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-/* ========== FIREBASE ========== */
+/* ========== FIREBASE CONFIG ========== */
 const firebaseConfig = {
   apiKey: "AIzaSyBjlUTjD5Km0b0KN2ncgFaH4nSiFpwFEpQ",
   authDomain: "sss-inventory-83bbc.firebaseapp.com",
@@ -427,22 +337,16 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 
-/* ----- App Check (reCAPTCHA v3) -----
-   Diagnostic init: logs every step so failures are visible.
-   For local dev, run BEFORE the page loads in DevTools:
-     self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-*/
-console.log("[AppCheck] firebase global:", typeof firebase);
-console.log("[AppCheck] firebase.appCheck:", typeof firebase.appCheck);
-console.log("[AppCheck] firebase.appCheck.ReCaptchaV3Provider:",
-  firebase.appCheck && typeof firebase.appCheck.ReCaptchaV3Provider);
+const db = firebase.firestore();
 
+/* ========== APP CHECK ========== */
 let appCheckOk = false;
-let appCheckErr = null;
+console.log("[AppCheck] firebase.appCheck:", typeof firebase.appCheck);
 
 if (typeof firebase.appCheck !== "function") {
-  appCheckErr = "firebase.appCheck is undefined — App Check SDK script tag failed to load (ad blocker? cache?)";
-  console.error("[AppCheck]", appCheckErr);
+  console.error("[AppCheck] App Check SDK not loaded — starting Firestore anyway (may be denied by rules).");
+  setSync("err", "App Check SDK missing");
+  initFirestoreSync(); // try anyway so you see the error
 } else {
   try {
     const provider = new firebase.appCheck.ReCaptchaV3Provider(
@@ -450,41 +354,33 @@ if (typeof firebase.appCheck !== "function") {
     );
     firebase.appCheck().activate(provider, /* autoRefresh */ true);
     appCheckOk = true;
-    console.log("[AppCheck] activate() succeeded — reCAPTCHA should load shortly");
+    console.log("[AppCheck] activate() succeeded");
 
-    // Try to fetch a token immediately so we get a real error if reCAPTCHA fails
-    firebase.appCheck().getToken(/* forceRefresh */ false)
+    firebase.appCheck().getToken(false)
       .then(t => {
         console.log("[AppCheck] ✓ token acquired, length:", (t && t.token || "").length);
-        // ONLY START SYNC HERE
-        initFirestoreSync(); 
-        const dot = document.getElementById("syncDot");
-        const tx  = document.getElementById("syncText");
-        if (dot && tx && tx.textContent === "Live(verified)") tx.textContent = "Live (verified)";
+        initFirestoreSync();
       })
       .catch(err => {
         console.error("[AppCheck] ✗ getToken failed:", err);
-       
-         initFirestoreSync(); 
-        const tx = document.getElementById("syncText");
-        if (tx) tx.textContent = "App Check token failed: " + (err.code || err.message);
+        setSync("err", "App Check token failed: " + (err.code || err.message));
+        // Still try — useful for debug-token scenarios
+        initFirestoreSync();
       });
   } catch (e) {
-    appCheckErr = e && (e.message || String(e));
     console.error("[AppCheck] activate() threw:", e);
+    setSync("err", "App Check init error");
+    initFirestoreSync();
   }
 }
 
-// Watch for the reCAPTCHA loader script being injected
 setTimeout(() => {
   const has = !!document.querySelector('script[src*="recaptcha"]');
   console.log("[AppCheck] reCAPTCHA script in DOM after 2s?", has);
   if (!has && appCheckOk) {
-    console.warn("[AppCheck] App Check activated but reCAPTCHA loader never appeared — likely an ad blocker or CSP is blocking it.");
+    console.warn("[AppCheck] reCAPTCHA loader never appeared — ad blocker / CSP / wrong site key?");
   }
 }, 2000);
-
-const db = firebase.firestore();
 
 /* ========== FULL BOM ========== */
 const INITIAL_PARTS = [
@@ -544,8 +440,8 @@ const INITIAL_PARTS = [
 
 /* ========== STATE ========== */
 let parts = [];
-let mode = "production";        // production | spare | all
-let statusFilter = "all";       // all | out | low | ok
+let mode = "production";
+let statusFilter = "all";
 let searchTerm = "";
 let sortKey = "sn";
 let sortDir = "asc";
@@ -568,7 +464,6 @@ function statusOf(p) {
 function statusLabel(s) {
   return { out:"Out", low:"Low", warn:"Reorder", ok:"OK" }[s] || s;
 }
-
 function showToast(msg, type) {
   const t = $("toast");
   t.textContent = msg;
@@ -576,53 +471,69 @@ function showToast(msg, type) {
   clearTimeout(showToast._t);
   showToast._t = setTimeout(() => t.classList.remove("show"), 2400);
 }
-
 function setSync(state, text) {
   const dot = $("syncDot"), tx = $("syncText");
-  dot.className = "dot " + (state || "");
-  tx.textContent = text;
+  if (dot) dot.className = "dot " + (state || "");
+  if (tx)  tx.textContent = text;
+}
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
 /* ========== FIRESTORE SYNC ========== */
-function initFirestoreSync() {db.collection("parts").onSnapshot(
-  async (snap) => {
-    setSync("live", "Live");
-    if (snap.empty && !seeded) {
-      seeded = true;
-      setSync("", "Seeding initial BOM…");
-      const batch = db.batch();
-      INITIAL_PARTS.forEach(p => batch.set(db.collection("parts").doc(p.id), p));
-      try { await batch.commit(); showToast("Initial BOM seeded", "success"); }
-      catch (e) { showToast("Seed failed: " + e.message, "error"); }
-      return;
+let unsubscribe = null;
+function initFirestoreSync() {
+  if (unsubscribe) return; // guard against double-init
+  setSync("", "Connecting…");
+
+  unsubscribe = db.collection("parts").onSnapshot(
+    async (snap) => {
+      setSync("live", "Live");
+
+      // Seed once if empty
+      if (snap.empty && !seeded) {
+        seeded = true;
+        setSync("", "Seeding initial BOM…");
+        const batch = db.batch();
+        INITIAL_PARTS.forEach(p => batch.set(db.collection("parts").doc(p.id), p));
+        try {
+          await batch.commit();
+          showToast("Initial BOM seeded", "success");
+        } catch (e) {
+          showToast("Seed failed: " + e.message, "error");
+          console.error("[Seed] failed:", e);
+        }
+        return; // next snapshot will populate `parts`
+      }
+
+      parts = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id:         data.id || d.id,
+          sn:         +data.sn || parseInt(data.id, 10) || 0,
+          name:       data.name || "(unnamed)",
+          company:    data.company || "—",
+          partNumber: data.partNumber || "—",
+          min:        +data.min || 1,
+          stock:      +data.stock || 0,
+          unitPrice:  +data.unitPrice || 0,
+          mode:       data.mode || "production",
+        };
+      });
+
+      $("lastUpdate").textContent = "Updated " + new Date().toLocaleTimeString();
+      render();
+    },
+    (err) => {
+      console.error("[Firestore] listener error:", err);
+      setSync("err", "Offline / blocked: " + (err.code || err.message));
+      showToast("Firestore: " + err.message, "error");
     }
-    parts = snap.docs.map(d => {
-      const data = d.data();
-      // Backfill defaults so legacy docs render gracefully
-      return {
-        id: data.id || d.id,
-        sn: +data.sn || parseInt(data.id, 10) || 0,
-        name: data.name || "(unnamed)",
-        company: data.company || "—",
-        partNumber: data.partNumber || "—",
-        min: +data.min || 1,
-        stock: +data.stock || 0,
-        unitPrice: +data.unitPrice || 0,
-        mode: data.mode || "production",
-      };
-    });
-    $("lastUpdate").textContent = "Updated " + new Date().toLocaleTimeString();
-    render();
-  },
-  (err) => {
-    setSync("err", "Offline / blocked");
-    showToast("Firestore: " + err.message, "error");
-  }
-);
+  );
 }
+
 /* ========== RENDER ========== */
 function render() {
-  // visible set per mode + filters + search
   const term = searchTerm.trim().toLowerCase();
   const visible = parts.filter(p => {
     if (mode !== "all" && p.mode !== mode) return false;
@@ -635,7 +546,6 @@ function render() {
     return true;
   });
 
-  // counts (across mode, ignoring search & status filter, for pill badges)
   const inMode = parts.filter(p => mode === "all" || p.mode === mode);
   let cAll = inMode.length, cOut = 0, cLow = 0, cOk = 0;
   inMode.forEach(p => {
@@ -649,39 +559,38 @@ function render() {
   $("cLow").textContent = cLow;
   $("cOk").textContent  = cOk;
 
-  // KPIs
   const prod = parts.filter(p => p.mode === "production");
   const buildCap = prod.length ? Math.min(...prod.map(p => Math.floor(p.stock / Math.max(1, p.min)))) : 0;
   const bottlenecks = prod
     .filter(p => Math.floor(p.stock / Math.max(1, p.min)) === buildCap)
     .slice(0, 3)
     .map(p => p.name.length > 28 ? p.name.slice(0,28) + "…" : p.name);
+
   $("kpiBuild").textContent = buildCap;
   $("kpiBottleneck").textContent = buildCap > 0
     ? "Bottleneck: " + bottlenecks.join(", ")
     : (bottlenecks.length ? "Blocked by: " + bottlenecks.join(", ") : "—");
-
   $("kpiTotal").textContent = parts.length;
   $("kpiVisible").textContent = visible.length + " shown";
+
   const lowAll = parts.filter(p => statusOf(p) === "out" || statusOf(p) === "low").length;
   $("kpiLow").textContent = lowAll;
+
   const totalValue = parts.reduce((sum, p) => sum + (p.stock * p.unitPrice), 0);
   $("kpiValue").textContent = fmtMoney(totalValue);
 
   $("buildBtn").disabled = buildCap <= 0;
 
-  // sort
   const dir = sortDir === "asc" ? 1 : -1;
   const sorted = [...visible].sort((a,b) => {
     let av, bv;
-    if (sortKey === "status")    { av = statusOf(a); bv = statusOf(b); }
+    if (sortKey === "status") { av = statusOf(a); bv = statusOf(b); }
     else if (sortKey === "lineValue") { av = a.stock * a.unitPrice; bv = b.stock * b.unitPrice; }
     else { av = a[sortKey]; bv = b[sortKey]; }
     if (typeof av === "string") return av.localeCompare(bv) * dir;
     return ((av || 0) - (bv || 0)) * dir;
   });
 
-  // sort indicator
   document.querySelectorAll("thead th").forEach(th => {
     th.classList.remove("sorted","asc");
     if (th.dataset.sort === sortKey) {
@@ -690,23 +599,17 @@ function render() {
     }
   });
 
-  // table body
   const tbody = $("tbody");
   tbody.innerHTML = "";
   const mlist = $("mobileList");
   mlist.innerHTML = "";
 
-  if (sorted.length === 0) {
-    $("emptyState").style.display = "block";
-  } else {
-    $("emptyState").style.display = "none";
-  }
+  $("emptyState").style.display = sorted.length === 0 ? "block" : "none";
 
   sorted.forEach(p => {
     const s = statusOf(p);
     const lineVal = p.stock * p.unitPrice;
 
-    // ----- Desktop row -----
     const tr = document.createElement("tr");
     tr.className = "row-" + s;
     tr.innerHTML = `
@@ -728,7 +631,6 @@ function render() {
     `;
     tbody.appendChild(tr);
 
-    // ----- Mobile card -----
     const card = document.createElement("div");
     card.className = "mobile-card";
     card.innerHTML = `
@@ -756,7 +658,6 @@ function render() {
     mlist.appendChild(card);
   });
 
-  // wire stock controls
   document.querySelectorAll('.stock-ctrl button').forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.id, act = btn.dataset.act;
@@ -775,10 +676,6 @@ function render() {
   });
 }
 
-function escapeHTML(s) {
-  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
-
 /* ========== ACTIONS ========== */
 function updateStock(id, value) {
   db.collection("parts").doc(id).update({ stock: value })
@@ -790,6 +687,7 @@ async function buildOneSSC() {
   const cap = prod.length ? Math.min(...prod.map(p => Math.floor(p.stock / Math.max(1, p.min)))) : 0;
   if (cap <= 0) { showToast("Insufficient parts to build", "error"); return; }
   if (!confirm(`Build 1 SSC unit?\n\nThis will deduct the per-SSC quantity from ${prod.length} parts.`)) return;
+
   const batch = db.batch();
   prod.forEach(p => {
     batch.update(db.collection("parts").doc(p.id), { stock: Math.max(0, p.stock - p.min) });
@@ -807,10 +705,11 @@ async function reseedBOM() {
   catch (e) { showToast("Reseed failed: " + e.message, "error"); }
 }
 
-/* ========== UI EVENT WIRING ========== */
-$("modeProd").addEventListener("click", () => { mode="production"; setActiveMode(); render(); });
-$("modeSpare").addEventListener("click", () => { mode="spare"; setActiveMode(); render(); });
-$("modeAll").addEventListener("click", () => { mode="all"; setActiveMode(); render(); });
+/* ========== UI WIRING ========== */
+$("modeProd").addEventListener("click",  () => { mode="production"; setActiveMode(); render(); });
+$("modeSpare").addEventListener("click", () => { mode="spare";      setActiveMode(); render(); });
+$("modeAll").addEventListener("click",   () => { mode="all";        setActiveMode(); render(); });
+
 function setActiveMode() {
   ["modeProd","modeSpare","modeAll"].forEach(id => $(id).classList.remove("active"));
   $({production:"modeProd", spare:"modeSpare", all:"modeAll"}[mode]).classList.add("active");
@@ -838,9 +737,7 @@ document.querySelectorAll("thead th").forEach(th => {
 $("buildBtn").addEventListener("click", buildOneSSC);
 $("reseedBtn").addEventListener("click", reseedBOM);
 
-/* Add Part modal */
 $("addBtn").addEventListener("click", () => {
-  const maxSn = parts.reduce((m, p) => Math.max(m, +p.sn || 0), 0);
   ["newName","newCompany","newPN"].forEach(id => $(id).value = "");
   $("newMin").value = 1; $("newStock").value = 0; $("newPrice").value = 0;
   $("newMode").value = "production";
@@ -849,22 +746,24 @@ $("addBtn").addEventListener("click", () => {
 });
 $("addCancel").addEventListener("click", () => $("addModalBg").classList.remove("show"));
 $("addModalBg").addEventListener("click", e => { if (e.target.id === "addModalBg") $("addModalBg").classList.remove("show"); });
+
 $("addSave").addEventListener("click", async () => {
   const name = $("newName").value.trim();
   const min  = parseInt($("newMin").value, 10);
-  if (!name) { showToast("Description is required", "error"); return; }
-  if (!min || min < 1) { showToast("Qty must be ≥ 1", "error"); return; }
-  const id = Date.now().toString();
+  if (!name)            { showToast("Description is required", "error"); return; }
+  if (!min || min < 1)  { showToast("Qty must be ≥ 1", "error"); return; }
+
+  const id    = Date.now().toString();
   const maxSn = parts.reduce((m, p) => Math.max(m, +p.sn || 0), 0);
   const doc = {
     id, sn: maxSn + 1,
     name,
-    company: $("newCompany").value.trim() || "—",
+    company:    $("newCompany").value.trim() || "—",
     partNumber: $("newPN").value.trim() || "—",
     min,
-    stock: parseInt($("newStock").value, 10) || 0,
-    unitPrice: parseFloat($("newPrice").value) || 0,
-    mode: $("newMode").value,
+    stock:      parseInt($("newStock").value, 10) || 0,
+    unitPrice:  parseFloat($("newPrice").value) || 0,
+    mode:       $("newMode").value,
   };
   try {
     await db.collection("parts").doc(id).set(doc);
@@ -875,5 +774,5 @@ $("addSave").addEventListener("click", async () => {
 
 setSync("", "Connecting…");
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9fb88e704dcb9aca',t:'MTc3ODc0NzU4OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
