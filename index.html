@@ -156,6 +156,24 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
 @media (max-width: 760px) {
   .wrap { padding: 12px; } .top { padding: 10px 14px; } .brand h1 { font-size: 14px; } .brand .sub { display: none; } .kpi .value { font-size: 22px; } .table-scroll { display: none; } .mobile-list { display: block; }
 }
+/* Row action buttons */
+.btn-row-edit, .btn-row-delete { border: 0; border-radius: 6px; padding: 4px 7px; font-size: 13px; cursor: pointer; transition: background .12s; }
+.btn-row-edit { background: transparent; color: #60a5fa; }
+.btn-row-edit:hover { background: rgba(96,165,250,.15); }
+.btn-row-delete { background: transparent; color: #f87171; }
+.btn-row-delete:hover { background: rgba(248,113,113,.15); }
+td.actions { white-space: nowrap; }
+/* Audit log items */
+.audit-item { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.audit-item .audit-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
+.audit-item .audit-part { font-weight: 600; color: #f1f5f9; font-size: 13px; flex: 1; }
+.audit-item .audit-time { font-size: 12px; color: #94a3b8; white-space: nowrap; }
+.audit-item .audit-meta { font-size: 12px; color: #94a3b8; margin-bottom: 3px; }
+.audit-item .audit-delta { font-size: 13px; font-weight: 600; }
+.audit-item .audit-delta.pos { color: #4ade80; }
+.audit-item .audit-delta.neg { color: #f87171; }
+.audit-item .audit-delta.neu { color: #94a3b8; }
+.audit-item .audit-reason { font-size: 11px; color: #fdba74; background: rgba(249,115,22,.1); border: 1px solid rgba(249,115,22,.2); border-radius: 4px; padding: 1px 6px; display: inline-block; }
 </style>
 </head>
 <body>
@@ -233,6 +251,7 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
     <button id="poBtn" class="btn btn-ghost">&#x1F6D2; Orders</button>
     <button id="addBtn" class="btn btn-primary admin-only">+ Add Part</button>
     <button id="importBtn" class="btn btn-ghost admin-only">&#x2B06; Import CSV</button>
+    <button id="auditBtn" class="btn btn-ghost">&#x1F4CB; Audit Log</button>
     <button id="reseedBtn" class="btn btn-warn admin-only">Reseed Full BOM</button>
   </section>
   <section class="card-wrap">
@@ -246,6 +265,7 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
       <th data-sort="status">Status</th>
       <th data-sort="unitPrice" class="price">Unit $</th>
       <th data-sort="lineValue" class="price">Line $</th>
+      <th>Actions</th>
     </tr></thead><tbody id="tbody"></tbody></table></div>
     <div class="mobile-list" id="mobileList"></div>
     <div id="emptyState" class="empty" style="display:none;"><div class="big">&#x1F4E6;</div><div>No parts match your filters.</div></div>
@@ -328,6 +348,50 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
     <button class="btn btn-ghost" id="importCancel">Cancel</button>
     <button class="btn btn-primary" id="importConfirm" disabled>Import</button>
   </div>
+</div></div>
+
+<!-- ===== EDIT PART MODAL ===== -->
+<div class="modal-bg" id="editModalBg"><div class="modal">
+  <h2>Edit Part</h2>
+  <input type="hidden" id="editPartId" />
+  <label>Description</label><input id="editName" type="text" />
+  <label>Company / Vendor</label><input id="editCompany" type="text" />
+  <label>Part Number</label><input id="editPN" type="text" />
+  <label>Qty Required per SSC</label><input id="editMin" type="number" min="1" />
+  <label>Unit Price ($)</label><input id="editPrice" type="number" min="0" step="0.01" />
+  <label>Mode</label><select id="editMode"><option value="production">Production</option><option value="spare">Spare</option></select>
+  <div class="actions"><button class="btn btn-ghost" id="editCancel">Cancel</button><button class="btn btn-primary" id="editSave">Save Changes</button></div>
+</div></div>
+
+<!-- ===== STOCK REASON MODAL ===== -->
+<div class="modal-bg" id="reasonModalBg" style="z-index:120;"><div class="modal" style="max-width:400px;">
+  <h2>Stock Adjustment</h2>
+  <div id="reasonPartInfo" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;color:#cbd5e1;"></div>
+  <label>Reason</label>
+  <select id="reasonSelect" style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px 10px;border-radius:6px;font-size:14px;">
+    <option value="Received shipment">Received shipment</option>
+    <option value="Used in build">Used in build</option>
+    <option value="Damaged/Scrap">Damaged / Scrap</option>
+    <option value="Audit correction">Audit correction</option>
+    <option value="Other">Other</option>
+  </select>
+  <label>Notes (optional)</label><input id="reasonNotes" type="text" placeholder="Additional details..." />
+  <div class="actions">
+    <button class="btn btn-ghost" id="reasonCancel">Cancel</button>
+    <button class="btn btn-primary" id="reasonConfirm">Confirm</button>
+  </div>
+</div></div>
+
+<!-- ===== AUDIT LOG MODAL ===== -->
+<div class="modal-bg" id="auditModalBg"><div class="modal" style="max-width:680px;">
+  <h2>&#x1F4CB; Audit Log</h2>
+  <div style="margin-bottom:12px;">
+    <input id="auditSearch" type="search" placeholder="Filter by part name, part #, or reason..." style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px 10px;border-radius:6px;font-size:13px;" />
+  </div>
+  <div id="auditList" style="max-height:460px;overflow-y:auto;">
+    <div class="empty"><div class="big">&#x1F4CB;</div><div>No audit entries yet.</div></div>
+  </div>
+  <div class="actions"><button class="btn btn-ghost" id="auditClose">Close</button></div>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -567,16 +631,16 @@ function render(){
     var tr=document.createElement("tr");
     tr.className="row-"+s;
     tr.dataset.partid=p.id;
-    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td>';
+    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td><td class="actions"><button class="btn-row-edit" data-id="'+p.id+'" title="Edit part">&#x270F;<\/button> <button class="btn-row-delete" data-id="'+p.id+'" title="Delete part">&#x1F5D1;<\/button><\/td>';
     tbody.appendChild(tr);
 
     var card=document.createElement("div");card.className="mobile-card";card.dataset.partid=p.id;
-    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div><\/div>';
+    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div style="display:flex;gap:6px;align-items:center;"><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div><button class="btn-row-edit" data-id="'+p.id+'" title="Edit">&#x270F;<\/button><button class="btn-row-delete" data-id="'+p.id+'" title="Delete">&#x1F5D1;<\/button><\/div><\/div>';
     mlist.appendChild(card);
   });
 
-  document.querySelectorAll('.stock-ctrl button').forEach(function(btn){btn.addEventListener("click",function(){var id=btn.dataset.id,act=btn.dataset.act;var p=parts.find(function(x){return x.id===id;});if(!p)return;var next=act==="inc"?p.stock+1:Math.max(0,p.stock-1);updateStock(id,next);});});
-  document.querySelectorAll('.stock-ctrl input').forEach(function(inp){inp.addEventListener("change",function(){var id=inp.dataset.id;var v=Math.max(0,parseInt(inp.value,10)||0);updateStock(id,v);});});
+  document.querySelectorAll('.stock-ctrl button').forEach(function(btn){btn.addEventListener("click",function(){var id=btn.dataset.id,act=btn.dataset.act;var p=parts.find(function(x){return x.id===id;});if(!p)return;var next=act==="inc"?p.stock+1:Math.max(0,p.stock-1);promptStockChange(id,next);});});
+  document.querySelectorAll('.stock-ctrl input').forEach(function(inp){inp.addEventListener("change",function(){var id=inp.dataset.id;var v=Math.max(0,parseInt(inp.value,10)||0);promptStockChange(id,v);});});
 }
 
 /* ========== ACTIONS ========== */
@@ -589,6 +653,10 @@ function buildOneSSC(){
   if(!confirm("Build 1 SSC unit?\n\nThis will deduct the per-SSC quantity from "+prod.length+" parts."))return;
   var batch=db.batch();
   prod.forEach(function(p){batch.update(db.collection("parts").doc(p.id),{stock:Math.max(0,p.stock-p.min)});});
+  prod.forEach(function(p){
+    var auditRef=db.collection("auditLog").doc();
+    batch.set(auditRef,{id:auditRef.id,partId:p.id,partName:p.name,partNumber:p.partNumber,oldStock:p.stock,newStock:Math.max(0,p.stock-p.min),delta:-p.min,reason:"Used in build",notes:"SSC build",changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+  });
   /* Log to build history */
   var histRef=db.collection("buildHistory").doc();
   batch.set(histRef,{
@@ -739,7 +807,11 @@ function receivePO(id,partId,qty){
   var part=parts.find(function(p){return p.id===partId;});
   var batch=db.batch();
   batch.update(db.collection("purchaseOrders").doc(id),{status:"received",updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-  if(part)batch.update(db.collection("parts").doc(partId),{stock:part.stock+qty});
+  if(part){
+    batch.update(db.collection("parts").doc(partId),{stock:part.stock+qty});
+    var recAuditRef=db.collection("auditLog").doc();
+    batch.set(recAuditRef,{id:recAuditRef.id,partId:partId,partName:part.name,partNumber:part.partNumber,oldStock:part.stock,newStock:part.stock+qty,delta:qty,reason:"Received shipment",notes:"Purchase order received",changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+  }
   batch.commit()
     .then(function(){showToast("Order received \u2014 stock updated","success");loadPOs();})
     .catch(function(e){showToast("Failed: "+e.message,"error");});
@@ -750,6 +822,112 @@ function deletePO(id){
   db.collection("purchaseOrders").doc(id).delete()
     .then(function(){showToast("Order deleted","success");loadPOs();})
     .catch(function(e){showToast("Failed: "+e.message,"error");});
+}
+
+/* ========== AUDIT LOG ========== */
+function logAudit(partId,partName,partNumber,oldStock,newStock,reason,notes,batch){
+  var delta=newStock-oldStock;
+  var ref=db.collection("auditLog").doc();
+  var entry={id:ref.id,partId:partId,partName:partName,partNumber:partNumber,oldStock:oldStock,newStock:newStock,delta:delta,reason:reason||"",notes:notes||"",changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()};
+  if(batch){batch.set(ref,entry);}
+  else{ref.set(entry).catch(function(e){console.error("[Audit]",e);});}
+}
+
+var pendingStockChange=null;
+function promptStockChange(id,newValue){
+  var p=parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  if(p.stock===newValue)return;
+  pendingStockChange={id:id,oldStock:p.stock,newStock:newValue,partName:p.name,partNumber:p.partNumber};
+  var delta=newValue-p.stock;
+  $("reasonPartInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Stock: <strong>'+p.stock+'<\/strong> \u2192 <strong>'+newValue+'<\/strong> ('+(delta>0?'+':'')+delta+')';
+  $("reasonSelect").value=delta>0?"Received shipment":"Used in build";
+  $("reasonNotes").value="";
+  $("reasonModalBg").classList.add("show");
+  $("reasonNotes").focus();
+}
+
+function confirmStockChange(){
+  if(!pendingStockChange)return;
+  var reason=$("reasonSelect").value;
+  var notes=$("reasonNotes").value.trim();
+  var sc=pendingStockChange;
+  pendingStockChange=null;
+  $("reasonModalBg").classList.remove("show");
+  db.collection("parts").doc(sc.id).update({stock:sc.newStock})
+    .then(function(){logAudit(sc.id,sc.partName,sc.partNumber,sc.oldStock,sc.newStock,reason,notes);showToast("Stock updated","success");})
+    .catch(function(e){showToast("Update failed: "+e.message,"error");});
+}
+
+function openAuditModal(){
+  $("auditModalBg").classList.add("show");
+  $("auditSearch").value="";
+  loadAuditLog("");
+}
+
+function loadAuditLog(filter){
+  var container=$("auditList");
+  container.innerHTML='<div style="color:#64748b;font-size:13px;padding:20px;">Loading...<\/div>';
+  db.collection("auditLog").orderBy("timestamp","desc").limit(200).get()
+    .then(function(snap){
+      if(snap.empty){container.innerHTML='<div class="empty"><div class="big">&#x1F4CB;<\/div><div>No audit entries yet.<\/div><\/div>';return;}
+      var docs=[];
+      snap.forEach(function(doc){docs.push(doc.data());});
+      var term=(filter||"").trim().toLowerCase();
+      if(term)docs=docs.filter(function(d){return(d.partName||"").toLowerCase().includes(term)||(d.reason||"").toLowerCase().includes(term)||(d.notes||"").toLowerCase().includes(term)||(d.partNumber||"").toLowerCase().includes(term);});
+      if(!docs.length){container.innerHTML='<div class="empty"><div class="big">&#x1F50D;<\/div><div>No entries match your filter.<\/div><\/div>';return;}
+      var html="";
+      docs.forEach(function(d){
+        var delta=+d.delta||0;
+        var dClass=delta>0?"pos":delta<0?"neg":"neu";
+        var dStr=(delta>0?"+":"")+delta;
+        var ts=fmtDate(d.timestamp);
+        html+='<div class="audit-item"><div class="audit-header"><span class="audit-part">'+escapeHTML(d.partName||"-")+'<\/span><span class="audit-time">'+escapeHTML(ts)+'<\/span><\/div><div class="audit-meta">Part #: '+escapeHTML(d.partNumber||"-")+' \u00b7 By: '+escapeHTML(d.changedBy||"system")+'<\/div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;"><span class="audit-delta '+dClass+'">'+d.oldStock+' \u2192 '+d.newStock+' ('+dStr+')<\/span><span class="audit-reason">'+escapeHTML(d.reason||"")+'<\/span><\/div>'+(d.notes?'<div style="font-size:11px;color:#64748b;margin-top:3px;">'+escapeHTML(d.notes)+'<\/div>':'')+'<\/div>';
+      });
+      container.innerHTML=html;
+    })
+    .catch(function(e){container.innerHTML='<div style="color:#f87171;padding:16px;">Failed to load: '+escapeHTML(e.message)+'<\/div>';});
+}
+
+/* ========== INLINE EDIT & DELETE ========== */
+function openEditModal(id){
+  var p=parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  $("editPartId").value=p.id;
+  $("editName").value=p.name;
+  $("editCompany").value=p.company;
+  $("editPN").value=p.partNumber;
+  $("editMin").value=p.min;
+  $("editPrice").value=p.unitPrice;
+  $("editMode").value=p.mode||"production";
+  $("editModalBg").classList.add("show");
+  $("editName").focus();
+}
+
+function saveEditPart(){
+  var id=$("editPartId").value;
+  var name=$("editName").value.trim();
+  var min=parseInt($("editMin").value,10);
+  if(!name){showToast("Description is required","error");return;}
+  if(!min||min<1){showToast("Qty must be >= 1","error");return;}
+  db.collection("parts").doc(id).update({
+    name:name,
+    company:$("editCompany").value.trim()||"-",
+    partNumber:$("editPN").value.trim()||"-",
+    min:min,
+    unitPrice:parseFloat($("editPrice").value)||0,
+    mode:$("editMode").value
+  }).then(function(){$("editModalBg").classList.remove("show");showToast("Part updated","success");})
+    .catch(function(e){showToast("Update failed: "+e.message,"error");});
+}
+
+function deletePart(id){
+  var p=parts.find(function(x){return x.id===id;});
+  if(!p)return;
+  if(!confirm("Delete part:\n\""+p.name+"\" ("+p.partNumber+")\n\nThis cannot be undone."))return;
+  db.collection("parts").doc(id).delete()
+    .then(function(){showToast("Part deleted","success");})
+    .catch(function(e){showToast("Delete failed: "+e.message,"error");});
 }
 
 /* ========== CSV IMPORT ========== */
@@ -983,6 +1161,37 @@ $("authTabBar").addEventListener("click",function(e){
 });
 
 setSync("","Connecting...");
+
+/* Edit Part */
+$("editCancel").addEventListener("click",function(){$("editModalBg").classList.remove("show");});
+$("editModalBg").addEventListener("click",function(e){if(e.target.id==="editModalBg")$("editModalBg").classList.remove("show");});
+$("editSave").addEventListener("click",saveEditPart);
+
+/* Reason modal */
+$("reasonCancel").addEventListener("click",function(){pendingStockChange=null;$("reasonModalBg").classList.remove("show");});
+$("reasonConfirm").addEventListener("click",confirmStockChange);
+$("reasonNotes").addEventListener("keydown",function(e){if(e.key==="Enter")confirmStockChange();});
+
+/* Audit Log */
+$("auditBtn").addEventListener("click",openAuditModal);
+$("auditClose").addEventListener("click",function(){$("auditModalBg").classList.remove("show");});
+$("auditModalBg").addEventListener("click",function(e){if(e.target.id==="auditModalBg")$("auditModalBg").classList.remove("show");});
+$("auditSearch").addEventListener("input",function(){loadAuditLog(this.value);});
+
+/* Inline edit/delete — event delegation on tbody and mobileList */
+$("tbody").addEventListener("click",function(e){
+  var editBtn=e.target.closest(".btn-row-edit");
+  if(editBtn){openEditModal(editBtn.dataset.id);return;}
+  var delBtn=e.target.closest(".btn-row-delete");
+  if(delBtn){deletePart(delBtn.dataset.id);return;}
+});
+$("mobileList").addEventListener("click",function(e){
+  var editBtn=e.target.closest(".btn-row-edit");
+  if(editBtn){openEditModal(editBtn.dataset.id);return;}
+  var delBtn=e.target.closest(".btn-row-delete");
+  if(delBtn){deletePart(delBtn.dataset.id);return;}
+});
+
 bootAppCheck();
 </script>
 </body>
