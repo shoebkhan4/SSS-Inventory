@@ -171,6 +171,8 @@ tr.row-highlight { outline: 2px solid #f97316; background: rgba(249,115,22,.1) !
 .btn-row-delete:hover { background: rgba(248,113,113,.15); }
 .btn-row-move { border: 1px solid rgba(52,211,153,.25); border-radius: 6px; padding: 3px 7px; font-size: 11px; font-weight: 600; cursor: pointer; transition: background .12s; background: rgba(52,211,153,.08); color: #34d399; }
 .btn-row-move:hover { background: rgba(52,211,153,.2); }
+.btn-row-move[disabled] { opacity: .45; cursor: not-allowed; background: rgba(100,116,139,.12); border-color: rgba(100,116,139,.25); color: #94a3b8; }
+.btn-row-move[disabled]:hover { background: rgba(100,116,139,.12); }
 td.actions { white-space: nowrap; }
 /* Audit log items */
 .audit-item { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
@@ -316,6 +318,7 @@ td.actions { white-space: nowrap; }
     <button id="historyBtn" class="btn btn-ghost">&#x1F4CB; History</button>
     <button id="poBtn" class="btn btn-ghost">&#x1F6D2; Orders</button>
     <button id="addBtn" class="btn btn-primary admin-only">+ Add Part</button>
+    <button id="fetchSpareImagesBtn" class="btn btn-ghost admin-only">&#x1F5BC; Fill Spare Images</button>
     <button id="importBtn" class="btn btn-ghost admin-only">&#x2B06; Import CSV</button>
     <button id="auditBtn" class="btn btn-ghost" aria-label="Audit Log">&#x1F4CB; Audit Log</button>
     <button id="analyticsBtn" class="btn btn-ghost">&#x1F4CA; Analytics</button>
@@ -888,18 +891,26 @@ function render(){
   sorted.forEach(function(p){
     var s=statusOf(p);
     var lineVal=p.stock*p.unitPrice;
+    var canMoveToProduction=p.mode==="spare"&&p.stock>0;
+    var moveTitle=canMoveToProduction?"Move to Production":"Stock is 0 — cannot move to Production";
+    var moveDesktopBtn=p.mode==="spare"
+      ?'<button class="btn-row-move" data-id="'+p.id+'" title="'+moveTitle+'" aria-label="Move to Production"'+(canMoveToProduction?'':' disabled')+'>&#x2197; Prod<\/button> '
+      :"";
+    var moveMobileBtn=p.mode==="spare"
+      ?'<button class="btn-row-move" data-id="'+p.id+'" title="'+moveTitle+'" aria-label="Move to Production"'+(canMoveToProduction?'':' disabled')+'>&#x2197;<\/button>'
+      :"";
     var imgHtml=p.imageUrl
       ?'<img class="part-thumb" src="'+escapeHTML(p.imageUrl)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'" />'
       :'<span class="part-thumb-placeholder" aria-hidden="true">&#x1F4E6;</span>';
     var tr=document.createElement("tr");
     tr.className="row-"+s;
     tr.dataset.partid=p.id;
-    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td style="width:44px;text-align:center;">'+imgHtml+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td><td class="actions">'+(p.mode==="spare"?'<button class="btn-row-move" data-id="'+p.id+'" title="Move to Production" aria-label="Move to Production">&#x2197; Prod<\/button> ':'' )+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button> <button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/td>';
+    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td style="width:44px;text-align:center;">'+imgHtml+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td><td class="actions">'+moveDesktopBtn+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button> <button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/td>';
     tbody.appendChild(tr);
 
     var card=document.createElement("div");card.className="mobile-card";card.dataset.partid=p.id;
-    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div>'+(p.mode==="spare"?'<button class="btn-row-move" data-id="'+p.id+'" title="Move to Production" aria-label="Move to Production">&#x2197;<\/button>':'')+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button><button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/div><\/div>';
-    mlist.appendChild(card);
+    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div>'+moveMobileBtn+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button><button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/div><\/div>';
+  mlist.appendChild(card);
   });
 
   document.querySelectorAll('.stock-ctrl button').forEach(function(btn){btn.addEventListener("click",function(){var id=btn.dataset.id,act=btn.dataset.act;var p=STATE.parts.find(function(x){return x.id===id;});if(!p)return;var next=act==="inc"?p.stock+1:Math.max(0,p.stock-1);promptStockChange(id,next);});});
@@ -1209,17 +1220,21 @@ function openEditModal(id){
 
 function saveEditPart(){
   var id=$("editPartId").value;
+  var existing=STATE.parts.find(function(x){return x.id===id;});
   var name=$("editName").value.trim();
   var min=parseInt($("editMin").value,10);
+  var mode=$("editMode").value;
+  if(!existing)return;
   if(!name){showToast("Description is required","error");return;}
   if(!min||min<1){showToast("Qty must be >= 1","error");return;}
+  if(existing.mode==="spare"&&mode==="production"&&(+existing.stock||0)<=0){showToast("Cannot move spare with 0 stock to Production","error");$("editMode").focus();return;}
   db.collection("parts").doc(id).update({
     name:name,
     company:$("editCompany").value.trim()||"-",
     partNumber:$("editPN").value.trim()||"-",
     min:min,
     unitPrice:parseFloat($("editPrice").value)||0,
-    mode:$("editMode").value,
+    mode:mode,
     imageUrl:$("editImageUrl").value.trim()||""
   }).then(function(){$("editModalBg").classList.remove("show");showToast("Part updated","success");})
     .catch(function(e){showToast("Update failed: "+e.message,"error");});
@@ -1262,6 +1277,7 @@ function executeDeletePart(){
 function moveToProduction(id){
   var p=STATE.parts.find(function(x){return x.id===id;});
   if(!p)return;
+  if((+p.stock||0)<=0){showToast("Cannot move spare with 0 stock to Production","error");return;}
   $("spareToProPartId").value=p.id;
   $("spareToProInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Part #: '+escapeHTML(p.partNumber)+' \u00b7 Current stock: <strong>'+p.stock+'<\/strong> units<br\/><span style="color:#94a3b8;font-size:11px;">This part will be reclassified from <em>Spare<\/em> to <em>Production<\/em> inventory.<\/span>';
   $("spareToPoPO").value="";
@@ -1280,6 +1296,7 @@ function executeSpareToProduction(){
   if(!jobNumber){showToast("Job Number is required","error");$("spareToProJob").focus();return;}
   var p=STATE.parts.find(function(x){return x.id===id;});
   if(!p)return;
+  if((+p.stock||0)<=0){showToast("Cannot move spare with 0 stock to Production","error");$("spareToProModalBg").classList.remove("show");return;}
   $("spareToProModalBg").classList.remove("show");
   db.collection("parts").doc(id).update({mode:"production"})
     .then(function(){
@@ -1287,6 +1304,61 @@ function executeSpareToProduction(){
       showToast("Part moved to Production","success");
     })
     .catch(function(e){showToast("Failed: "+e.message,"error");});
+}
+
+function buildImageLookupQuery(p){
+  var tokens=[];
+  if(p.partNumber&&p.partNumber!=="-")tokens.push(p.partNumber);
+  if(p.name&&p.name!=="(unnamed)")tokens.push(p.name);
+  if(p.company&&p.company!=="-")tokens.push(p.company);
+  tokens.push("industrial spare part");
+  return tokens.join(" ");
+}
+
+function findImageUrlForPart(part){
+  var query=buildImageLookupQuery(part).trim();
+  if(!query)return Promise.resolve("");
+  var url="https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch="+encodeURIComponent(query)+"&gsrlimit=5&prop=imageinfo&iiprop=url&iiurlwidth=360&format=json&origin=*";
+  return fetch(url).then(function(res){
+    if(!res.ok)throw new Error("image lookup failed");
+    return res.json();
+  }).then(function(data){
+    if(!data||!data.query||!data.query.pages)return "";
+    var pages=Object.keys(data.query.pages).map(function(k){return data.query.pages[k];});
+    for(var i=0;i<pages.length;i++){
+      var page=pages[i];
+      if(page&&page.imageinfo&&page.imageinfo[0]){
+        return page.imageinfo[0].thumburl||page.imageinfo[0].url||"";
+      }
+    }
+    return "";
+  }).catch(function(){return "";});
+}
+
+function autofillSpareImages(){
+  var btn=$("fetchSpareImagesBtn");
+  var targets=STATE.parts.filter(function(p){return p.mode==="spare"&&!p.imageUrl;});
+  if(!targets.length){showToast("No spare parts need image links");return;}
+  btn.disabled=true;
+  btn.textContent="Finding images...";
+  showToast("Searching image links for "+targets.length+" spare parts...");
+  var updated=0;
+  var idx=0;
+  function step(){
+    if(idx>=targets.length){
+      btn.disabled=false;
+      btn.textContent="\uD83D\uDDBC Fill Spare Images";
+      showToast("Spare image lookup done. Updated "+updated+" / "+targets.length,(updated?"success":""));
+      return;
+    }
+    var part=targets[idx++];
+    findImageUrlForPart(part).then(function(imageUrl){
+      if(!imageUrl)return null;
+      return db.collection("parts").doc(part.id).update({imageUrl:imageUrl}).then(function(){updated++;});
+    }).catch(function(){})
+      .then(function(){setTimeout(step,180);});
+  }
+  step();
 }
 
 /* ========== EXPORT ========== */
@@ -1604,6 +1676,7 @@ $("poList").addEventListener("click",function(e){
 
 /* CSV Import */
 $("importBtn").addEventListener("click",openImportModal);
+$("fetchSpareImagesBtn").addEventListener("click",autofillSpareImages);
 $("importCancel").addEventListener("click",function(){$("importModalBg").classList.remove("show");});
 $("importModalBg").addEventListener("click",function(e){if(e.target.id==="importModalBg")$("importModalBg").classList.remove("show");});
 $("importFilePicker").addEventListener("change",function(e){handleImportFile(e.target.files[0]);});
