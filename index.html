@@ -799,7 +799,7 @@ var STATE = {
 function $(id){return document.getElementById(id);}
 var spareImagesBtnLabel="\uD83D\uDDBC Fill Spare Images";
 /* Courtesy pause between web lookups to reduce rapid-fire requests */
-var imageLookupRateLimitMs=180;
+var imageLookupDelayMs=180;
 function fmtMoney(n){if(!isFinite(n))return"$0.00";return"$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtDate(ts){
   if(!ts)return"--";
@@ -894,7 +894,7 @@ function render(){
   sorted.forEach(function(p){
     var s=statusOf(p);
     var lineVal=p.stock*p.unitPrice;
-    var canMoveToProd=p.mode==="spare"&&p.stock>0;
+    var canMoveToProd=p.mode==="spare"&&(+p.stock||0)>0;
     var moveTitle=canMoveToProd?"Move to Production":"Stock is 0 — cannot move to Production";
     var moveDesktopBtn=p.mode==="spare"
       ?'<button class="btn-row-move" data-id="'+p.id+'" title="'+moveTitle+'" aria-label="Move to Production"'+(canMoveToProd?'':' disabled')+'>&#x2197; Prod<\/button> '
@@ -1353,15 +1353,20 @@ function autofillSpareImages(){
     if(idx>=targets.length){
       btn.disabled=false;
       btn.textContent=spareImagesBtnLabel;
-      showToast("Spare image lookup done. Updated "+updated+" / "+targets.length+(failed?" ("+failed+" failed)":""),(updated?"success":"info"));
+      var doneMsg="Spare image lookup done. Updated "+updated+" / "+targets.length;
+      if(failed)doneMsg+=" ("+failed+" failed)";
+      showToast(doneMsg,(updated?"success":"info"));
       return;
     }
     var part=targets[idx++];
     findImageUrlForPart(part).then(function(imageUrl){
       if(!imageUrl)return null;
       return db.collection("parts").doc(part.id).update({imageUrl:imageUrl}).then(function(){updated++;});
-    }).catch(function(err){failed++;console.warn("[ImageLookup]",part.partNumber||part.id,err&&err.message?err.message:err);})
-      .then(function(){setTimeout(step,imageLookupRateLimitMs);});
+    }).catch(function(err){
+      var errMsg=err&&err.message?err.message:String(err||"unknown error");
+      failed++;
+      console.warn("[ImageLookup]",part.partNumber||part.id,errMsg);
+    }).then(function(){setTimeout(step,imageLookupDelayMs);});
   }
   step();
 }
