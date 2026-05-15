@@ -802,8 +802,12 @@ var STATE = {
 /* ========== HELPERS ========== */
 function $(id){return document.getElementById(id);}
 var spareImagesBtnLabel="\uD83D\uDDBC Fill Spare Images";
-/* Courtesy pause between web lookups to reduce rapid-fire requests */
+/* Courtesy pause between web lookups to reduce rapid-fire requests to the image API */
 var imageLookupDelayMs=180;
+var imageLookupMaxResults=5;
+var imageLookupThumbWidth=360;
+var maxVendorNameLength=120;
+var maxVendorLeadDays=730;
 function fmtMoney(n){if(!isFinite(n))return"$0.00";return"$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtDate(ts){
   if(!ts)return"--";
@@ -1325,7 +1329,7 @@ function buildImageLookupQuery(p){
 function findImageUrlForPart(part){
   var query=buildImageLookupQuery(part).trim();
   if(!query)return Promise.resolve("");
-  var wikimediaSearchBaseUrl="https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrlimit=5&prop=imageinfo&iiprop=url&iiurlwidth=360&format=json&origin=*";
+  var wikimediaSearchBaseUrl="https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrlimit="+imageLookupMaxResults+"&prop=imageinfo&iiprop=url&iiurlwidth="+imageLookupThumbWidth+"&format=json&origin=*";
   var url=wikimediaSearchBaseUrl+"&gsrsearch="+encodeURIComponent(query);
   return fetch(url).then(function(res){
     if(!res.ok)throw new Error("Image lookup failed: "+res.status+" "+res.statusText);
@@ -1866,7 +1870,7 @@ function normalizeVendorKey(name){
 function addVendorFromModal(){
   var raw=$("newVendorName").value.trim();
   if(!raw){showToast("Vendor name is required","error");$("newVendorName").focus();return;}
-  if(raw.length>120){showToast("Vendor name is too long","error");$("newVendorName").focus();return;}
+  if(raw.length>maxVendorNameLength){showToast("Vendor name is too long","error");$("newVendorName").focus();return;}
   if(raw.includes("/")){showToast("Vendor name cannot contain /","error");$("newVendorName").focus();return;}
   var key=normalizeVendorKey(raw);
   var existsInParts=STATE.parts.some(function(p){return normalizeVendorKey(p.company)===key;});
@@ -1977,7 +1981,7 @@ function openVendorDetail(vendorName,stats,contact){
     +'<div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:12px 0 6px;">Parts from this Vendor ('+vendorParts.length+')</div>'
     +'<div style="max-height:220px;overflow-y:auto;">'+partsHtml+'</div>';
   $("vSaveBtn").addEventListener("click",function(){
-    var leadDays=Math.max(0,parseInt($("vLead").value,10)||0);
+    var leadDays=Math.min(maxVendorLeadDays,Math.max(0,parseInt($("vLead").value,10)||0));
     var data={phone:$("vPhone").value.trim(),email:$("vEmail").value.trim(),website:$("vWeb").value.trim(),leadDays:leadDays,notes:$("vNotes").value.trim(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
     db.collection("vendors").doc(vendorName).set(data,{merge:true})
       .then(function(){showToast("Vendor info saved","success");})
