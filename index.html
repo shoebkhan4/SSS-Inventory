@@ -891,13 +891,13 @@ function render(){
   sorted.forEach(function(p){
     var s=statusOf(p);
     var lineVal=p.stock*p.unitPrice;
-    var canMoveToProduction=p.mode==="spare"&&p.stock>0;
-    var moveTitle=canMoveToProduction?"Move to Production":"Stock is 0 — cannot move to Production";
+    var canMoveToProd=p.mode==="spare"&&p.stock>0;
+    var moveTitle=canMoveToProd?"Move to Production":"Stock is 0 — cannot move to Production";
     var moveDesktopBtn=p.mode==="spare"
-      ?'<button class="btn-row-move" data-id="'+p.id+'" title="'+moveTitle+'" aria-label="Move to Production"'+(canMoveToProduction?'':' disabled')+'>&#x2197; Prod<\/button> '
+      ?'<button class="btn-row-move" data-id="'+p.id+'" title="'+moveTitle+'" aria-label="Move to Production"'+(canMoveToProd?'':' disabled')+'>&#x2197; Prod<\/button> '
       :"";
     var moveMobileBtn=p.mode==="spare"
-      ?'<button class="btn-row-move" data-id="'+p.id+'" title="'+moveTitle+'" aria-label="Move to Production"'+(canMoveToProduction?'':' disabled')+'>&#x2197;<\/button>'
+      ?'<button class="btn-row-move" data-id="'+p.id+'" title="'+moveTitle+'" aria-label="Move to Production"'+(canMoveToProd?'':' disabled')+'>&#x2197;<\/button>'
       :"";
     var imgHtml=p.imageUrl
       ?'<img class="part-thumb" src="'+escapeHTML(p.imageUrl)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'" />'
@@ -1224,7 +1224,7 @@ function saveEditPart(){
   var name=$("editName").value.trim();
   var min=parseInt($("editMin").value,10);
   var mode=$("editMode").value;
-  if(!existing)return;
+  if(!existing){showToast("Part not found","error");return;}
   if(!name){showToast("Description is required","error");return;}
   if(!min||min<1){showToast("Qty must be >= 1","error");return;}
   if(existing.mode==="spare"&&mode==="production"&&(+existing.stock||0)<=0){showToast("Cannot move spare with 0 stock to Production","error");$("editMode").focus();return;}
@@ -1242,7 +1242,7 @@ function saveEditPart(){
 
 function openDeleteModal(id){
   var p=STATE.parts.find(function(x){return x.id===id;});
-  if(!p)return;
+  if(!p){showToast("Part not found","error");return;}
   $("deletePartId").value=p.id;
   $("deletePartInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Part #: '+escapeHTML(p.partNumber)+' \u00b7 Current stock: <strong>'+p.stock+'<\/strong>';
   $("deleteReason").value="Obsolete";
@@ -1262,7 +1262,7 @@ function executeDeletePart(){
   if(!poNumber){showToast("PO Number is required","error");$("deletePO").focus();return;}
   if(!jobNumber){showToast("Job Number is required","error");$("deleteJob").focus();return;}
   var p=STATE.parts.find(function(x){return x.id===id;});
-  if(!p)return;
+  if(!p){showToast("Part not found","error");return;}
   $("deleteModalBg").classList.remove("show");
   var batch=db.batch();
   batch.delete(db.collection("parts").doc(id));
@@ -1318,9 +1318,10 @@ function buildImageLookupQuery(p){
 function findImageUrlForPart(part){
   var query=buildImageLookupQuery(part).trim();
   if(!query)return Promise.resolve("");
-  var url="https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch="+encodeURIComponent(query)+"&gsrlimit=5&prop=imageinfo&iiprop=url&iiurlwidth=360&format=json&origin=*";
+  var WIKIMEDIA_SEARCH_BASE_URL="https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrlimit=5&prop=imageinfo&iiprop=url&iiurlwidth=360&format=json&origin=*";
+  var url=WIKIMEDIA_SEARCH_BASE_URL+"&gsrsearch="+encodeURIComponent(query);
   return fetch(url).then(function(res){
-    if(!res.ok)throw new Error("image lookup failed");
+    if(!res.ok)throw new Error("Image lookup failed: "+res.status+" "+res.statusText);
     return res.json();
   }).then(function(data){
     if(!data||!data.query||!data.query.pages)return "";
@@ -1338,25 +1339,28 @@ function findImageUrlForPart(part){
 function autofillSpareImages(){
   var btn=$("fetchSpareImagesBtn");
   var targets=STATE.parts.filter(function(p){return p.mode==="spare"&&!p.imageUrl;});
-  if(!targets.length){showToast("No spare parts need image links");return;}
+  if(!targets.length){showToast("No spare parts without images found");return;}
+  var SPARE_IMAGES_BTN_LABEL="\uD83D\uDDBC Fill Spare Images";
+  var IMAGE_LOOKUP_RATE_LIMIT_MS=180;
   btn.disabled=true;
   btn.textContent="Finding images...";
   showToast("Searching image links for "+targets.length+" spare parts...");
   var updated=0;
+  var failed=0;
   var idx=0;
   function step(){
     if(idx>=targets.length){
       btn.disabled=false;
-      btn.textContent="\uD83D\uDDBC Fill Spare Images";
-      showToast("Spare image lookup done. Updated "+updated+" / "+targets.length,(updated?"success":""));
+      btn.textContent=SPARE_IMAGES_BTN_LABEL;
+      showToast("Spare image lookup done. Updated "+updated+" / "+targets.length+(failed?" ("+failed+" failed)":"") ,(updated?"success":""));
       return;
     }
     var part=targets[idx++];
     findImageUrlForPart(part).then(function(imageUrl){
       if(!imageUrl)return null;
       return db.collection("parts").doc(part.id).update({imageUrl:imageUrl}).then(function(){updated++;});
-    }).catch(function(){})
-      .then(function(){setTimeout(step,180);});
+    }).catch(function(){failed++;})
+      .then(function(){setTimeout(step,IMAGE_LOOKUP_RATE_LIMIT_MS);});
   }
   step();
 }
