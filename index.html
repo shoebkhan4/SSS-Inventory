@@ -797,6 +797,9 @@ var STATE = {
 
 /* ========== HELPERS ========== */
 function $(id){return document.getElementById(id);}
+var SPARE_IMAGES_BTN_LABEL="\uD83D\uDDBC Fill Spare Images";
+/* Courtesy pause between web lookups to reduce rapid-fire requests */
+var IMAGE_LOOKUP_RATE_LIMIT_MS=180;
 function fmtMoney(n){if(!isFinite(n))return"$0.00";return"$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtDate(ts){
   if(!ts)return"--";
@@ -1340,8 +1343,6 @@ function autofillSpareImages(){
   var btn=$("fetchSpareImagesBtn");
   var targets=STATE.parts.filter(function(p){return p.mode==="spare"&&!p.imageUrl;});
   if(!targets.length){showToast("No spare parts without images found");return;}
-  var SPARE_IMAGES_BTN_LABEL="\uD83D\uDDBC Fill Spare Images";
-  var IMAGE_LOOKUP_RATE_LIMIT_MS=180;
   btn.disabled=true;
   btn.textContent="Finding images...";
   showToast("Searching image links for "+targets.length+" spare parts...");
@@ -1352,14 +1353,14 @@ function autofillSpareImages(){
     if(idx>=targets.length){
       btn.disabled=false;
       btn.textContent=SPARE_IMAGES_BTN_LABEL;
-      showToast("Spare image lookup done. Updated "+updated+" / "+targets.length+(failed?" ("+failed+" failed)":"") ,(updated?"success":""));
+      showToast("Spare image lookup done. Updated "+updated+" / "+targets.length+(failed?" ("+failed+" failed)":"") ,(updated?"success":"info"));
       return;
     }
     var part=targets[idx++];
     findImageUrlForPart(part).then(function(imageUrl){
       if(!imageUrl)return null;
       return db.collection("parts").doc(part.id).update({imageUrl:imageUrl}).then(function(){updated++;});
-    }).catch(function(){failed++;})
+    }).catch(function(err){failed++;console.warn("[ImageLookup]",part.partNumber||part.id,err&&err.message?err.message:err);})
       .then(function(){setTimeout(step,IMAGE_LOOKUP_RATE_LIMIT_MS);});
   }
   step();
