@@ -594,6 +594,10 @@ td.actions { white-space: nowrap; }
   <h2>&#x1F3ED; Vendor Management</h2>
   <div id="vendorNotifBanner" class="notif-banner" style="display:none;"></div>
   <div id="vendorListView">
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <input id="newVendorName" type="text" placeholder="Add new vendor name..." style="flex:1;min-width:220px;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px 10px;border-radius:6px;font-size:13px;" />
+      <button class="btn btn-primary" id="addVendorBtn">+ Add Vendor</button>
+    </div>
     <div id="vendorList" style="max-height:420px;overflow-y:auto;">
       <div class="empty"><div class="big">&#x1F3ED;</div><div>Loading vendors...</div></div>
     </div>
@@ -1851,30 +1855,67 @@ function openVendorsModal(){
   $("vendorsModalBg").classList.add("show");
   $("vendorListView").style.display="block";
   $("vendorDetailView").style.display="none";
+  $("newVendorName").value="";
   loadVendorList();
 }
 
+function normalizeVendorKey(name){
+  return(name||"").toLowerCase().trim();
+}
+
+function addVendorFromModal(){
+  var raw=$("newVendorName").value.trim();
+  if(!raw){showToast("Vendor name is required","error");$("newVendorName").focus();return;}
+  if(raw.length>120){showToast("Vendor name is too long","error");$("newVendorName").focus();return;}
+  if(raw.includes("/")){showToast("Vendor name cannot contain /","error");$("newVendorName").focus();return;}
+  var key=normalizeVendorKey(raw);
+  var existsInParts=STATE.parts.some(function(p){return normalizeVendorKey(p.company)===key;});
+  db.collection("vendors").get().then(function(snap){
+    var existsInVendors=false;
+    snap.forEach(function(doc){if(normalizeVendorKey(doc.id)===key)existsInVendors=true;});
+    if(existsInParts||existsInVendors){showToast("Vendor already exists","error");return;}
+    return db.collection("vendors").doc(raw).set({
+      name:raw,
+      createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    },{merge:true}).then(function(){
+      $("newVendorName").value="";
+      showToast("Vendor added","success");
+      loadVendorList();
+    });
+  }).catch(function(e){showToast("Add vendor failed: "+e.message,"error");});
+}
+
 function loadVendorList(){
-  /* Aggregate vendors from parts */
+  /* Aggregate vendors from parts, then merge with manually added vendors */
   var vendorMap={};
   STATE.parts.forEach(function(p){
     var co=p.company||"Unknown";
-    if(!vendorMap[co])vendorMap[co]={name:co,partCount:0,lineValue:0,outCount:0};
-    vendorMap[co].partCount++;
-    vendorMap[co].lineValue+=p.stock*p.unitPrice;
-    if(statusOf(p)==="out"||statusOf(p)==="low")vendorMap[co].outCount++;
+    var k=normalizeVendorKey(co);
+    if(!vendorMap[k])vendorMap[k]={name:co,partCount:0,lineValue:0,outCount:0};
+    vendorMap[k].partCount++;
+    vendorMap[k].lineValue+=p.stock*p.unitPrice;
+    if(statusOf(p)==="out"||statusOf(p)==="low")vendorMap[k].outCount++;
   });
-  var vendors=Object.values(vendorMap).sort(function(a,b){return b.lineValue-a.lineValue;});
   var container=$("vendorList");
-  if(!vendors.length){container.innerHTML='<div class="empty"><div class="big">&#x1F3ED;</div><div>No vendors found.</div></div>';return;}
+  container.innerHTML='<div style="color:#64748b;font-size:13px;padding:14px;">Loading vendors...<\/div>';
 
-  /* Fetch extra contact info from Firestore */
+  /* Fetch extra contact info from Firestore and include vendors without parts */
   db.collection("vendors").get().then(function(snap){
     var contacts={};
-    snap.forEach(function(doc){contacts[doc.id]=doc.data();});
+    snap.forEach(function(doc){
+      contacts[doc.id]=doc.data();
+      var k=normalizeVendorKey(doc.id);
+      if(!vendorMap[k])vendorMap[k]={name:doc.id,partCount:0,lineValue:0,outCount:0};
+    });
+    var vendors=Object.values(vendorMap).sort(function(a,b){
+      if(b.lineValue!==a.lineValue)return b.lineValue-a.lineValue;
+      return a.name.localeCompare(b.name);
+    });
+    if(!vendors.length){container.innerHTML='<div class="empty"><div class="big">&#x1F3ED;</div><div>No vendors found.</div></div>';return;}
     var html='<div style="font-size:12px;color:#64748b;margin-bottom:10px;">'+vendors.length+' vendor(s) found in inventory</div>';
     vendors.forEach(function(v){
-      var ci=contacts[v.name]||{};
+      var ci=contacts[v.name]||contacts[Object.keys(contacts).find(function(id){return normalizeVendorKey(id)===normalizeVendorKey(v.name);})]||{};
       var alertHtml=v.outCount>0?'<span class="badge low" style="margin-left:4px;">'+v.outCount+' low/out</span>':'';
       html+='<div class="vendor-card" data-vendor="'+escapeHTML(v.name)+'">'
         +'<div style="flex:1;min-width:0;">'
@@ -1887,9 +1928,16 @@ function loadVendorList(){
     container.innerHTML=html;
     container.addEventListener("click",function(e){
       var card=e.target.closest(".vendor-card");
-      if(card)openVendorDetail(card.dataset.vendor,vendorMap[card.dataset.vendor],contacts[card.dataset.vendor]||{});
+      if(!card)return;
+      var selected=card.dataset.vendor;
+      var selectedKey=normalizeVendorKey(selected);
+      var stats=vendorMap[selectedKey]||{name:selected,partCount:0,lineValue:0,outCount:0};
+      var contact=contacts[selected]||contacts[Object.keys(contacts).find(function(id){return normalizeVendorKey(id)===selectedKey;})]||{};
+      openVendorDetail(selected,stats,contact);
     },{once:true});
   }).catch(function(){
+    var vendors=Object.values(vendorMap).sort(function(a,b){return b.lineValue-a.lineValue;});
+    if(!vendors.length){container.innerHTML='<div class="empty"><div class="big">&#x1F3ED;</div><div>No vendors found.</div></div>';return;}
     var html='';
     vendors.forEach(function(v){
       html+='<div class="vendor-card" data-vendor="'+escapeHTML(v.name)+'">'
@@ -1903,6 +1951,8 @@ function loadVendorList(){
 function openVendorDetail(vendorName,stats,contact){
   $("vendorListView").style.display="none";
   $("vendorDetailView").style.display="block";
+  stats=stats||{name:vendorName,partCount:0,lineValue:0,outCount:0};
+  contact=contact||{};
   var vendorParts=STATE.parts.filter(function(p){return p.company===vendorName;});
   var partsHtml=vendorParts.map(function(p){
     var s=statusOf(p);
@@ -1912,6 +1962,7 @@ function openVendorDetail(vendorName,stats,contact){
       +'<div style="font-size:12px;color:#94a3b8;text-align:right;">Stock: <strong>'+p.stock+'</strong><br/>'+fmtMoney(p.unitPrice)+' ea</div>'
       +'</div>';
   }).join("");
+  if(!partsHtml)partsHtml='<div class="empty" style="padding:12px 0;"><div>No parts mapped to this vendor yet.</div></div>';
   $("vendorDetailContent").innerHTML=
     '<div style="font-weight:700;font-size:16px;color:#f1f5f9;margin-bottom:10px;">'+escapeHTML(vendorName)+'</div>'
     +'<div class="vendor-detail">'
@@ -1926,7 +1977,8 @@ function openVendorDetail(vendorName,stats,contact){
     +'<div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:12px 0 6px;">Parts from this Vendor ('+vendorParts.length+')</div>'
     +'<div style="max-height:220px;overflow-y:auto;">'+partsHtml+'</div>';
   $("vSaveBtn").addEventListener("click",function(){
-    var data={phone:$("vPhone").value.trim(),email:$("vEmail").value.trim(),website:$("vWeb").value.trim(),leadDays:parseInt($("vLead").value,10)||0,notes:$("vNotes").value.trim(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+    var leadDays=Math.max(0,parseInt($("vLead").value,10)||0);
+    var data={phone:$("vPhone").value.trim(),email:$("vEmail").value.trim(),website:$("vWeb").value.trim(),leadDays:leadDays,notes:$("vNotes").value.trim(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
     db.collection("vendors").doc(vendorName).set(data,{merge:true})
       .then(function(){showToast("Vendor info saved","success");})
       .catch(function(e){showToast("Save failed: "+e.message,"error");});
@@ -2042,6 +2094,8 @@ $("vendorsBtn").addEventListener("click",openVendorsModal);
 $("vendorsClose").addEventListener("click",function(){$("vendorsModalBg").classList.remove("show");});
 $("vendorsModalBg").addEventListener("click",function(e){if(e.target.id==="vendorsModalBg")$("vendorsModalBg").classList.remove("show");});
 $("vendorBack").addEventListener("click",function(){$("vendorListView").style.display="block";$("vendorDetailView").style.display="none";loadVendorList();});
+$("addVendorBtn").addEventListener("click",addVendorFromModal);
+$("newVendorName").addEventListener("keydown",function(e){if(e.key==="Enter")addVendorFromModal();});
 
 $("qrLabelsBtn").addEventListener("click",openQRModal);
 $("qrClose").addEventListener("click",function(){$("qrModalBg").classList.remove("show");});
