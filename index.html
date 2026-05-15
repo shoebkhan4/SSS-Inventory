@@ -1349,9 +1349,10 @@ function findImageUrlForPart(part){
 
 function autofillSpareImages(){
   var btn=$("fetchSpareImagesBtn");
-  var targets=STATE.parts.filter(function(p){return p.mode==="spare"&&!p.imageUrl;});
-  if(!targets.length){showToast("No spare parts without images found");return;}
+  if(btn.disabled)return;
   btn.disabled=true;
+  var targets=STATE.parts.filter(function(p){return p.mode==="spare"&&!p.imageUrl;});
+  if(!targets.length){btn.disabled=false;showToast("No spare parts without images found");return;}
   btn.textContent="Finding images...";
   showToast("Searching image links for "+targets.length+" spare parts...");
   var updated=0;
@@ -1907,8 +1908,10 @@ function loadVendorList(){
   /* Fetch extra contact info from Firestore and include vendors without parts */
   db.collection("vendors").get().then(function(snap){
     var contacts={};
+    var contactsByKey={};
     snap.forEach(function(doc){
       contacts[doc.id]=doc.data();
+      contactsByKey[normalizeVendorKey(doc.id)]=doc.data();
       var k=normalizeVendorKey(doc.id);
       if(!vendorMap[k])vendorMap[k]={name:doc.id,partCount:0,lineValue:0,outCount:0};
     });
@@ -1919,7 +1922,7 @@ function loadVendorList(){
     if(!vendors.length){container.innerHTML='<div class="empty"><div class="big">&#x1F3ED;</div><div>No vendors found.</div></div>';return;}
     var html='<div style="font-size:12px;color:#64748b;margin-bottom:10px;">'+vendors.length+' vendor(s) found in inventory</div>';
     vendors.forEach(function(v){
-      var ci=contacts[v.name]||contacts[Object.keys(contacts).find(function(id){return normalizeVendorKey(id)===normalizeVendorKey(v.name);})]||{};
+      var ci=contacts[v.name]||contactsByKey[normalizeVendorKey(v.name)]||{};
       var alertHtml=v.outCount>0?'<span class="badge low" style="margin-left:4px;">'+v.outCount+' low/out</span>':'';
       html+='<div class="vendor-card" data-vendor="'+escapeHTML(v.name)+'">'
         +'<div style="flex:1;min-width:0;">'
@@ -1936,7 +1939,7 @@ function loadVendorList(){
       var selected=card.dataset.vendor;
       var selectedKey=normalizeVendorKey(selected);
       var stats=vendorMap[selectedKey]||{name:selected,partCount:0,lineValue:0,outCount:0};
-      var contact=contacts[selected]||contacts[Object.keys(contacts).find(function(id){return normalizeVendorKey(id)===selectedKey;})]||{};
+      var contact=contacts[selected]||contactsByKey[selectedKey]||{};
       openVendorDetail(selected,stats,contact);
     },{once:true});
   }).catch(function(){
