@@ -15,6 +15,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(function(e){ console.warn("[SW] Registration failed:", e); });
@@ -234,6 +235,19 @@ td.actions { white-space: nowrap; }
 /* ===== PHASE 4: PART IMAGES ===== */
 .part-thumb { width: 32px; height: 32px; border-radius: 5px; object-fit: cover; border: 1px solid #334155; background: #1e293b; vertical-align: middle; }
 .part-thumb-placeholder { width: 32px; height: 32px; border-radius: 5px; background: #1e293b; border: 1px solid #334155; display: inline-flex; align-items: center; justify-content: center; color: #334155; font-size: 16px; vertical-align: middle; }
+.row-clickable { cursor: pointer; }
+.row-clickable:hover td.desc .name { color: #fdba74; }
+.part-detail-layout { display: grid; grid-template-columns: 180px 1fr; gap: 14px; }
+.part-detail-image-wrap { background: #0b1220; border: 1px solid #334155; border-radius: 10px; min-height: 180px; display: grid; place-items: center; overflow: hidden; }
+.part-detail-image-wrap img { width: 100%; max-height: 260px; object-fit: contain; background: #0b1220; }
+.part-detail-placeholder { color: #64748b; font-size: 32px; }
+.part-detail-meta { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 12px; font-size: 12px; line-height: 1.9; color: #cbd5e1; }
+.part-detail-meta strong { color: #f1f5f9; }
+.part-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.field-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .8px; }
+@media (max-width: 680px) {
+  .part-detail-layout { grid-template-columns: 1fr; }
+}
 /* ===== PHASE 4: NOTIFICATIONS ===== */
 .notif-banner { background: rgba(249,115,22,.12); border: 1px solid rgba(249,115,22,.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: #fdba74; }
 /* ===== PHASE 4: OFFLINE ===== */
@@ -411,6 +425,7 @@ td.actions { white-space: nowrap; }
     <div class="sr-name" id="srName"></div>
     <div class="sr-meta" id="srMeta"></div>
   </div>
+  <div id="scanStatus" style="display:none;color:#94a3b8;font-size:12px;margin-top:10px;"></div>
   <div id="scanNoMatch" style="display:none;color:#f87171;font-size:13px;margin-top:10px;"></div>
   <div class="actions"><button class="btn btn-ghost" id="scanClose">Close Scanner</button></div>
 </div></div>
@@ -447,6 +462,22 @@ td.actions { white-space: nowrap; }
   <div class="actions"><button class="btn btn-ghost" id="editCancel">Cancel</button><button class="btn btn-primary" id="editSave">Save Changes</button></div>
 </div></div>
 
+<!-- ===== PART DETAIL MODAL ===== -->
+<div class="modal-bg" id="partDetailModalBg"><div class="modal" style="max-width:720px;">
+  <h2>&#x1F50E; Part Details</h2>
+  <div class="part-detail-layout">
+    <div class="part-detail-image-wrap" id="partDetailImageWrap"></div>
+    <div class="part-detail-meta">
+      <div style="font-size:16px;font-weight:700;color:#f8fafc;line-height:1.4;margin-bottom:10px;" id="partDetailTitle"></div>
+      <div class="part-detail-grid" id="partDetailGrid"></div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-ghost" id="partDetailClose">Close</button>
+    <button class="btn btn-primary" id="partDetailEdit">Edit Part</button>
+  </div>
+</div></div>
+
 <!-- ===== STOCK REASON MODAL ===== -->
 <div class="modal-bg" id="reasonModalBg" style="z-index:120;"><div class="modal" style="max-width:400px;">
   <h2>Stock Adjustment</h2>
@@ -460,6 +491,10 @@ td.actions { white-space: nowrap; }
     <option value="Other">Other</option>
   </select>
   <label>Notes (optional)</label><input id="reasonNotes" type="text" placeholder="Additional details..." />
+  <div id="reasonLinkedPOWrap" style="display:none;">
+    <label>Open PO for this part</label>
+    <select id="reasonLinkedPO" style="width:100%;background:#0b1220;border:1px solid #334155;color:#e5e7eb;padding:8px 10px;border-radius:6px;font-size:14px;"></select>
+  </div>
   <label>PO Number</label><input id="reasonPO" type="text" placeholder="e.g. PO-2024-001" />
   <label>Job Number</label><input id="reasonJob" type="text" placeholder="e.g. JOB-123" />
   <div class="actions">
@@ -580,11 +615,11 @@ td.actions { white-space: nowrap; }
   <div class="analytics-grid" id="anKpis"></div>
   <div class="chart-row">
     <div class="chart-box"><h4>Stock Health</h4><canvas id="chartStatus" height="200"></canvas></div>
-    <div class="chart-box"><h4>Top 10 Parts by Inventory Value</h4><canvas id="chartValue" height="200"></canvas></div>
+    <div class="chart-box"><h4>Top Shortage Parts (Missing vs Min)</h4><canvas id="chartValue" height="200"></canvas></div>
   </div>
   <div class="chart-row">
-    <div class="chart-box"><h4>Parts by Vendor</h4><canvas id="chartVendor" height="200"></canvas></div>
-    <div class="chart-box"><h4>Build Coverage (units each part supports)</h4><canvas id="chartCoverage" height="200"></canvas></div>
+    <div class="chart-box"><h4>Vendor Concentration by Inventory Value</h4><canvas id="chartVendor" height="200"></canvas></div>
+    <div class="chart-box"><h4>Recent Stock Movement (Last 7 Days)</h4><canvas id="chartCoverage" height="200"></canvas></div>
   </div>
   <div class="actions"><button class="btn btn-ghost" id="analyticsClose">Close</button></div>
 </div></div>
@@ -621,6 +656,7 @@ td.actions { white-space: nowrap; }
   <div id="qrPartList" style="max-height:340px;overflow-y:auto;border:1px solid #1f2937;border-radius:8px;padding:4px 10px;background:#0b1220;"></div>
   <div class="actions" style="margin-top:14px;">
     <button class="btn btn-ghost" id="qrClose">Close</button>
+    <button class="btn btn-ghost" id="qrPdfBtn">&#x1F4D1; Download PDF</button>
     <button class="btn btn-primary" id="qrPrintBtn">&#x1F5A8; Print Labels</button>
   </div>
 </div></div>
@@ -790,9 +826,15 @@ var STATE = {
   sortDir: "asc",
   seeded: false,
   html5QrcodeScanner: null,
+  scannerStarting: false,
+  scannerStopping: false,
+  scanSessionToken: 0,
   importParsedRows: [],
   /* chart instances — kept to allow proper destroy/recreate on modal reopen */
   charts: {},
+  openPOCache: {},
+  selectedDetailPartId: "",
+  analyticsReqToken: 0,
   /* Configuration constants */
   AUDIT_LOG_LIMIT: 200,
   /* Notification localStorage key — increment suffix when schema changes */
@@ -914,12 +956,12 @@ function render(){
       ?'<img class="part-thumb" src="'+escapeHTML(p.imageUrl)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'" />'
       :'<span class="part-thumb-placeholder" aria-hidden="true">&#x1F4E6;</span>';
     var tr=document.createElement("tr");
-    tr.className="row-"+s;
+    tr.className="row-"+s+" row-clickable";
     tr.dataset.partid=p.id;
     tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td style="width:44px;text-align:center;">'+imgHtml+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td><td class="actions">'+moveDesktopBtn+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button> <button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/td>';
     tbody.appendChild(tr);
 
-    var card=document.createElement("div");card.className="mobile-card";card.dataset.partid=p.id;
+    var card=document.createElement("div");card.className="mobile-card row-clickable";card.dataset.partid=p.id;
     card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div>'+moveMobileBtn+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button><button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/div><\/div>';
   mlist.appendChild(card);
   });
@@ -1112,18 +1154,60 @@ function updatePOStatus(id,status){
 }
 
 function receivePO(id,partId,qty,poNumber,jobNumber){
+  qty=parseInt(qty,10)||0;
+  if(qty<1){showToast("Invalid PO quantity; cannot receive","error");return;}
   if(!confirm("Mark order as Received and add "+qty+" unit(s) to stock?"))return;
-  var part=STATE.parts.find(function(p){return p.id===partId;});
-  var batch=db.batch();
-  batch.update(db.collection("purchaseOrders").doc(id),{status:"received",updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-  if(part){
-    batch.update(db.collection("parts").doc(partId),{stock:part.stock+qty});
-    var recAuditRef=db.collection("auditLog").doc();
-    batch.set(recAuditRef,{id:recAuditRef.id,partId:partId,partName:part.name,partNumber:part.partNumber,oldStock:part.stock,newStock:part.stock+qty,delta:qty,reason:"Received shipment",notes:"Purchase order received",poNumber:poNumber||"",jobNumber:jobNumber||"",changedBy:currentUser?currentUser.email:"system",timestamp:firebase.firestore.FieldValue.serverTimestamp()});
-  }
-  batch.commit()
-    .then(function(){showToast("Order received \u2014 stock updated","success");loadPOs();})
-    .catch(function(e){showToast("Failed: "+e.message,"error");});
+  var poRef=db.collection("purchaseOrders").doc(id);
+  db.runTransaction(function(tx){
+    return tx.get(poRef).then(function(poSnap){
+      if(!poSnap.exists)throw new Error("Purchase order not found");
+      var po=poSnap.data()||{};
+      if((po.status||"pending")==="received")throw new Error("Purchase order already received");
+      var resolvedPartId=po.partId||partId||"";
+      if(!resolvedPartId)throw new Error("PO is missing a linked part");
+      var resolvedQty=parseInt(po.qty,10)||qty;
+      if(resolvedQty<1)throw new Error("PO has invalid quantity");
+      var partRef=db.collection("parts").doc(resolvedPartId);
+      return tx.get(partRef).then(function(partSnap){
+        if(!partSnap.exists)throw new Error("Part missing for this PO; update/cancel the PO first");
+        var partData=partSnap.data()||{};
+        var oldStock=+partData.stock||0;
+        var newStock=oldStock+resolvedQty;
+        tx.update(poRef,{
+          status:"received",
+          qty:resolvedQty,
+          partId:resolvedPartId,
+          partName:partData.name||po.partName||"-",
+          partNumber:partData.partNumber||po.partNumber||"-",
+          poNumber:po.poNumber||poNumber||"",
+          jobNumber:po.jobNumber||jobNumber||"",
+          updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+          receivedAt:firebase.firestore.FieldValue.serverTimestamp(),
+          receivedBy:currentUser?currentUser.email:"system"
+        });
+        tx.update(partRef,{stock:newStock});
+        var recAuditRef=db.collection("auditLog").doc();
+        tx.set(recAuditRef,{
+          id:recAuditRef.id,
+          partId:resolvedPartId,
+          partName:partData.name||po.partName||"-",
+          partNumber:partData.partNumber||po.partNumber||"-",
+          oldStock:oldStock,
+          newStock:newStock,
+          delta:resolvedQty,
+          reason:"Received shipment",
+          notes:"Purchase order received",
+          poNumber:po.poNumber||poNumber||"",
+          jobNumber:po.jobNumber||jobNumber||"",
+          changedBy:currentUser?currentUser.email:"system",
+          timestamp:firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+    });
+  }).then(function(){
+    showToast("Order received — stock updated","success");
+    loadPOs();
+  }).catch(function(e){showToast("Failed: "+(e&&e.message?e.message:String(e)),"error");});
 }
 
 function deletePO(id){
@@ -1143,6 +1227,57 @@ function logAudit(partId,partName,partNumber,oldStock,newStock,reason,notes,poNu
 }
 
 var pendingStockChange=null;
+function updateReasonLinkedPOOptions(partId){
+  var wrap=$("reasonLinkedPOWrap");
+  var sel=$("reasonLinkedPO");
+  if(!partId){wrap.style.display="none";sel.innerHTML="";return Promise.resolve([]);}
+  sel.innerHTML='<option value="">Loading open POs…</option>';
+  wrap.style.display="block";
+  return db.collection("purchaseOrders").where("partId","==",partId).limit(50).get()
+    .then(function(snap){
+      var open=[];
+      snap.forEach(function(doc){
+        var d=doc.data()||{};
+        var st=d.status||"pending";
+        if(st==="pending"||st==="ordered")open.push(d);
+      });
+      open.sort(function(a,b){
+        var at=a.createdAt&&a.createdAt.toDate?a.createdAt.toDate().getTime():0;
+        var bt=b.createdAt&&b.createdAt.toDate?b.createdAt.toDate().getTime():0;
+        return bt-at;
+      });
+      STATE.openPOCache[partId]=open;
+      if(!open.length){
+        sel.innerHTML='<option value="">No open PO found for this part</option>';
+        return open;
+      }
+      sel.innerHTML='<option value="">Select open PO to prefill…</option>'+open.map(function(po){
+        var ref=escapeHTML(po.poNumber||"-");
+        var job=escapeHTML(po.jobNumber||"-");
+        var q=+po.qty||0;
+        return'<option value="'+escapeHTML(po.id)+'">PO '+ref+' · Job '+job+' · Qty '+q+'</option>';
+      }).join("");
+      return open;
+    })
+    .catch(function(err){
+      wrap.style.display="none";
+      console.warn("[ReasonOpenPO]",err&&err.message?err.message:err);
+      return [];
+    });
+}
+
+function applyLinkedPOSelection(){
+  var sc=pendingStockChange;
+  if(!sc)return;
+  var partPOs=STATE.openPOCache[sc.id]||[];
+  var selectedId=$("reasonLinkedPO").value;
+  var po=partPOs.find(function(x){return x.id===selectedId;});
+  if(!po)return;
+  if(!($("reasonPO").value||"").trim())$("reasonPO").value=po.poNumber||"";
+  if(!($("reasonJob").value||"").trim())$("reasonJob").value=po.jobNumber||"";
+  if(!$("reasonNotes").value.trim())$("reasonNotes").value="Linked open PO: "+(po.poNumber||po.id);
+}
+
 function promptStockChange(id,newValue){
   var p=STATE.parts.find(function(x){return x.id===id;});
   if(!p)return;
@@ -1154,6 +1289,9 @@ function promptStockChange(id,newValue){
   $("reasonNotes").value="";
   $("reasonPO").value="";
   $("reasonJob").value="";
+  $("reasonLinkedPOWrap").style.display="none";
+  $("reasonLinkedPO").innerHTML="";
+  if(delta>0)updateReasonLinkedPOOptions(id);
   $("reasonModalBg").classList.add("show");
   $("reasonPO").focus();
 }
@@ -1168,6 +1306,7 @@ function confirmStockChange(){
   if(!jobNumber){showToast("Job Number is required","error");$("reasonJob").focus();return;}
   var sc=pendingStockChange;
   pendingStockChange=null;
+  STATE.openPOCache[sc.id]=[];
   $("reasonModalBg").classList.remove("show");
   db.collection("parts").doc(sc.id).update({stock:sc.newStock})
     .then(function(){logAudit(sc.id,sc.partName,sc.partNumber,sc.oldStock,sc.newStock,reason,notes,poNumber,jobNumber);showToast("Stock updated","success");})
@@ -1318,33 +1457,44 @@ function executeSpareToProduction(){
 }
 
 function buildImageLookupQuery(p){
-  var tokens=[];
-  if(p.partNumber&&p.partNumber!=="-")tokens.push(p.partNumber);
-  if(p.name&&p.name!=="(unnamed)")tokens.push(p.name);
-  if(p.company&&p.company!=="-")tokens.push(p.company);
-  tokens.push("industrial spare part");
-  return tokens.join(" ");
+  var queries=[];
+  var pn=(p.partNumber&&p.partNumber!=="-")?p.partNumber.trim():"";
+  var nm=(p.name&&p.name!=="(unnamed)")?p.name.trim():"";
+  var co=(p.company&&p.company!=="-")?p.company.trim():"";
+  if(pn)queries.push(pn+" industrial spare part");
+  if(pn&&co)queries.push(pn+" "+co+" industrial component");
+  if(pn&&nm)queries.push(pn+" "+nm);
+  if(nm&&co)queries.push(nm+" "+co+" spare part");
+  if(nm)queries.push(nm+" industrial spare part");
+  return queries.filter(function(q,i,arr){return q&&arr.indexOf(q)===i;});
 }
 
 function findImageUrlForPart(part){
-  var query=buildImageLookupQuery(part).trim();
-  if(!query)return Promise.resolve("");
+  var queries=buildImageLookupQuery(part);
+  if(!queries.length)return Promise.resolve("");
   var wikimediaSearchBaseUrl="https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrlimit="+imageLookupMaxResults+"&prop=imageinfo&iiprop=url&iiurlwidth="+imageLookupThumbWidth+"&format=json&origin=*";
-  var url=wikimediaSearchBaseUrl+"&gsrsearch="+encodeURIComponent(query);
-  return fetch(url).then(function(res){
-    if(!res.ok)throw new Error("Image lookup failed: "+res.status+" "+res.statusText);
-    return res.json();
-  }).then(function(data){
-    if(!data||!data.query||!data.query.pages)return "";
-    var pages=Object.keys(data.query.pages).map(function(k){return data.query.pages[k];});
-    for(var i=0;i<pages.length;i++){
-      var page=pages[i];
-      if(page&&page.imageinfo&&page.imageinfo[0]){
-        return page.imageinfo[0].thumburl||page.imageinfo[0].url||"";
+  function lookupAt(i){
+    if(i>=queries.length)return Promise.resolve("");
+    var url=wikimediaSearchBaseUrl+"&gsrsearch="+encodeURIComponent(queries[i]);
+    return fetch(url).then(function(res){
+      if(!res.ok)throw new Error("Image lookup failed: "+res.status+" "+res.statusText);
+      return res.json();
+    }).then(function(data){
+      if(!data||!data.query||!data.query.pages)return "";
+      var pages=Object.keys(data.query.pages).map(function(k){return data.query.pages[k];});
+      for(var j=0;j<pages.length;j++){
+        var page=pages[j];
+        if(page&&page.imageinfo&&page.imageinfo[0]){
+          return page.imageinfo[0].thumburl||page.imageinfo[0].url||"";
+        }
       }
-    }
-    return "";
-  }).catch(function(){return "";});
+      return "";
+    }).catch(function(){return "";}).then(function(urlFound){
+      if(urlFound)return urlFound;
+      return lookupAt(i+1);
+    });
+  }
+  return lookupAt(0);
 }
 
 function autofillSpareImages(){
@@ -1353,29 +1503,29 @@ function autofillSpareImages(){
   btn.disabled=true;
   var targets=STATE.parts.filter(function(p){return p.mode==="spare"&&!p.imageUrl;});
   if(!targets.length){btn.disabled=false;showToast("No spare parts without images found");return;}
-  btn.textContent="Finding images...";
+  btn.textContent="Finding images... 0/"+targets.length;
   showToast("Searching image links for "+targets.length+" spare parts...");
   var updated=0;
   var failed=0;
   var idx=0;
+  function setProgress(){
+    btn.textContent="Finding images... "+(updated+failed)+"/"+targets.length;
+  }
   function step(){
     if(idx>=targets.length){
       btn.disabled=false;
       btn.textContent=spareImagesBtnLabel;
-      var doneMsg="Spare image lookup done. Updated "+updated+" / "+targets.length;
-      if(failed)doneMsg+=" ("+failed+" failed)";
-      showToast(doneMsg,(updated?"success":"info"));
+      showToast("Spare image lookup done. Success: "+updated+" · Failed: "+failed+" · Total: "+targets.length,(updated?"success":"info"));
       return;
     }
     var part=targets[idx++];
     findImageUrlForPart(part).then(function(imageUrl){
-      if(!imageUrl)return null;
-      return db.collection("parts").doc(part.id).update({imageUrl:imageUrl}).then(function(){updated++;});
+      if(!imageUrl){failed++;return null;}
+      return db.collection("parts").doc(part.id).update({imageUrl:imageUrl}).then(function(){updated++;}).catch(function(err){failed++;throw err;});
     }).catch(function(err){
       var errMsg=err&&err.message?err.message:String(err||"unknown error");
-      failed++;
       console.warn("[ImageLookup]",part.partNumber||part.id,errMsg);
-    }).then(function(){setTimeout(step,imageLookupDelayMs);});
+    }).then(function(){setProgress();setTimeout(step,imageLookupDelayMs);});
   }
   step();
 }
@@ -1578,34 +1728,72 @@ function doImport(){
 }
 
 function openScanModal(){
+  STATE.scanSessionToken++;
   $("scanModalBg").classList.add("show");
   $("scanResultBox").style.display="none";
   $("scanNoMatch").style.display="none";
-  startScanner();
+  setScanStatus("Starting camera…");
+  startScanner(STATE.scanSessionToken);
 }
 
-function startScanner(){
-  if(STATE.html5QrcodeScanner)return;
-  STATE.html5QrcodeScanner=new Html5Qrcode("scanReader");
-  STATE.html5QrcodeScanner.start(
+function setScanStatus(msg,isError){
+  var el=$("scanStatus");
+  if(!msg){el.style.display="none";el.textContent="";return;}
+  el.textContent=msg;
+  el.style.display="block";
+  el.style.color=isError?"#f87171":"#94a3b8";
+}
+
+function startScanner(sessionToken){
+  if(STATE.scannerStarting||STATE.html5QrcodeScanner)return;
+  STATE.scannerStarting=true;
+  var scanner=new Html5Qrcode("scanReader");
+  STATE.html5QrcodeScanner=scanner;
+  scanner.start(
     {facingMode:"environment"},
     {fps:10,qrbox:{width:250,height:150}},
     function(decodedText){ handleScanResult(decodedText); },
     function(){}
-  ).catch(function(e){
+  ).then(function(){
+    STATE.scannerStarting=false;
+    if(sessionToken!==STATE.scanSessionToken||!$("scanModalBg").classList.contains("show")){
+      stopScanner(true);
+      return;
+    }
+    setScanStatus("Scanner active. Point at a part QR/barcode.");
+  }).catch(function(e){
+    STATE.scannerStarting=false;
+    STATE.html5QrcodeScanner=null;
+    try{scanner.clear();}catch(err){}
+    setScanStatus("Camera unavailable: "+(e.message||String(e)),true);
     $("scanNoMatch").textContent="Camera unavailable: "+(e.message||String(e));
     $("scanNoMatch").style.display="block";
+    showToast("Scanner could not start","error");
   });
 }
 
-function stopScanner(){
-  if(STATE.html5QrcodeScanner){
-    STATE.html5QrcodeScanner.stop().catch(function(){}).finally(function(){
-      try{STATE.html5QrcodeScanner.clear();}catch(e){}
-      STATE.html5QrcodeScanner=null;
-      $("scanReader").innerHTML="";
-    });
-  }
+function stopScanner(silent){
+  if(STATE.scannerStopping)return Promise.resolve();
+  var scanner=STATE.html5QrcodeScanner;
+  STATE.html5QrcodeScanner=null;
+  STATE.scannerStarting=false;
+  setScanStatus("");
+  $("scanReader").innerHTML="";
+  if(!scanner)return Promise.resolve();
+  STATE.scannerStopping=true;
+  return scanner.stop().catch(function(e){
+    console.warn("[ScannerStop]",e&&e.message?e.message:e);
+    if(!silent)showToast("Scanner stopped with warning","error");
+  }).finally(function(){
+    try{scanner.clear();}catch(err){}
+    STATE.scannerStopping=false;
+  });
+}
+
+function closeScanModal(silent){
+  STATE.scanSessionToken++;
+  $("scanModalBg").classList.remove("show");
+  return stopScanner(silent);
 }
 
 function handleScanResult(code){
@@ -1618,10 +1806,14 @@ function handleScanResult(code){
     $("scanResultBox").style.display="block";
     $("scanNoMatch").style.display="none";
     highlightPart(match.id);
+    setScanStatus("Matched and highlighted. Closing scanner…");
+    showToast("Scan matched: "+match.partNumber,"success");
+    setTimeout(function(){closeScanModal(true);},320);
   } else {
     $("scanResultBox").style.display="none";
     $("scanNoMatch").textContent="No part found for scanned code: "+code;
     $("scanNoMatch").style.display="block";
+    setScanStatus("No matching part. Try another label.");
   }
 }
 
@@ -1631,6 +1823,32 @@ function highlightPart(partId){
   if(tr){tr.classList.add("row-highlight");tr.scrollIntoView({behavior:"smooth",block:"center"});}
   var card=document.querySelector(".mobile-card[data-partid='"+partId+"']");
   if(card){card.classList.add("row-highlight");card.scrollIntoView({behavior:"smooth",block:"center"});}
+}
+
+function openPartDetailModal(partId){
+  var p=STATE.parts.find(function(x){return x.id===partId;});
+  if(!p)return;
+  STATE.selectedDetailPartId=p.id;
+  $("partDetailTitle").textContent=p.name||"(unnamed)";
+  if(p.imageUrl){
+    $("partDetailImageWrap").innerHTML='<img src="'+escapeHTML(p.imageUrl)+'" alt="Image for '+escapeHTML(p.partNumber||p.name||"part")+'" onerror="this.remove();document.getElementById(\'partDetailImageWrap\').innerHTML=\'<div class=&quot;part-detail-placeholder&quot;>📦</div>\'" />';
+  } else {
+    $("partDetailImageWrap").innerHTML='<div class="part-detail-placeholder">📦</div>';
+  }
+  var st=statusOf(p);
+  var lineVal=p.stock*p.unitPrice;
+  $("partDetailGrid").innerHTML=
+    '<div><div class="field-label">Part #</div><strong>'+escapeHTML(p.partNumber||"-")+'</strong></div>'+
+    '<div><div class="field-label">Vendor</div><strong>'+escapeHTML(p.company||"-")+'</strong></div>'+
+    '<div><div class="field-label">Mode</div><strong>'+escapeHTML(p.mode||"-")+'</strong></div>'+
+    '<div><div class="field-label">Status</div><span class="badge '+st+'">'+statusLabel(st)+'</span></div>'+
+    '<div><div class="field-label">Stock</div><strong>'+p.stock+'</strong></div>'+
+    '<div><div class="field-label">Req / SSC</div><strong>'+p.min+'</strong></div>'+
+    '<div><div class="field-label">Unit Price</div><strong>'+fmtMoney(p.unitPrice)+'</strong></div>'+
+    '<div><div class="field-label">Line Value</div><strong>'+fmtMoney(lineVal)+'</strong></div>'+
+    '<div><div class="field-label">SN</div><strong>'+p.sn+'</strong></div>'+
+    '<div><div class="field-label">Part ID</div><strong>'+escapeHTML(p.id)+'</strong></div>';
+  $("partDetailModalBg").classList.add("show");
 }
 
 /* ========== UI WIRING ========== */
@@ -1703,8 +1921,8 @@ $("importConfirm").addEventListener("click",doImport);
 
 /* Barcode Scan */
 $("scanBtn").addEventListener("click",openScanModal);
-$("scanClose").addEventListener("click",function(){stopScanner();$("scanModalBg").classList.remove("show");});
-$("scanModalBg").addEventListener("click",function(e){if(e.target.id==="scanModalBg"){stopScanner();$("scanModalBg").classList.remove("show");}});
+$("scanClose").addEventListener("click",function(){closeScanModal();});
+$("scanModalBg").addEventListener("click",function(e){if(e.target.id==="scanModalBg")closeScanModal();});
 
 /* Auth */
 $("loginBtn").addEventListener("click",doSignIn);
@@ -1735,10 +1953,26 @@ $("editCancel").addEventListener("click",function(){$("editModalBg").classList.r
 $("editModalBg").addEventListener("click",function(e){if(e.target.id==="editModalBg")$("editModalBg").classList.remove("show");});
 $("editSave").addEventListener("click",saveEditPart);
 
+/* Part details */
+$("partDetailClose").addEventListener("click",function(){$("partDetailModalBg").classList.remove("show");});
+$("partDetailModalBg").addEventListener("click",function(e){if(e.target.id==="partDetailModalBg")$("partDetailModalBg").classList.remove("show");});
+$("partDetailEdit").addEventListener("click",function(){
+  var id=STATE.selectedDetailPartId;
+  if(!id)return;
+  $("partDetailModalBg").classList.remove("show");
+  openEditModal(id);
+});
+
 /* Reason modal */
-$("reasonCancel").addEventListener("click",function(){pendingStockChange=null;$("reasonModalBg").classList.remove("show");});
+$("reasonCancel").addEventListener("click",function(){if(pendingStockChange)STATE.openPOCache[pendingStockChange.id]=[];pendingStockChange=null;$("reasonModalBg").classList.remove("show");});
 $("reasonConfirm").addEventListener("click",confirmStockChange);
 $("reasonNotes").addEventListener("keydown",function(e){if(e.key==="Enter")confirmStockChange();});
+$("reasonSelect").addEventListener("change",function(){
+  if(!pendingStockChange)return;
+  if(this.value==="Received shipment"&&pendingStockChange.newStock>pendingStockChange.oldStock){updateReasonLinkedPOOptions(pendingStockChange.id);}
+  else{$("reasonLinkedPOWrap").style.display="none";$("reasonLinkedPO").innerHTML="";}
+});
+$("reasonLinkedPO").addEventListener("change",applyLinkedPOSelection);
 
 /* Audit Log */
 $("auditBtn").addEventListener("click",openAuditModal);
@@ -1754,6 +1988,9 @@ $("tbody").addEventListener("click",function(e){
   if(delBtn){openDeleteModal(delBtn.dataset.id);return;}
   var moveBtn=e.target.closest(".btn-row-move");
   if(moveBtn){moveToProduction(moveBtn.dataset.id);return;}
+  if(e.target.closest(".stock-ctrl")||e.target.closest(".actions"))return;
+  var row=e.target.closest("tr[data-partid]");
+  if(row)openPartDetailModal(row.dataset.partid);
 });
 $("mobileList").addEventListener("click",function(e){
   var editBtn=e.target.closest(".btn-row-edit");
@@ -1762,6 +1999,9 @@ $("mobileList").addEventListener("click",function(e){
   if(delBtn){openDeleteModal(delBtn.dataset.id);return;}
   var moveBtn=e.target.closest(".btn-row-move");
   if(moveBtn){moveToProduction(moveBtn.dataset.id);return;}
+  if(e.target.closest(".stock-ctrl"))return;
+  var card=e.target.closest(".mobile-card[data-partid]");
+  if(card)openPartDetailModal(card.dataset.partid);
 });
 
 /* Build SSC Modal */
@@ -1812,47 +2052,100 @@ $("productsModalBg").addEventListener("click",function(e){if(e.target.id==="prod
 
 /* ========== PHASE 3: ANALYTICS DASHBOARD ========== */
 function openAnalyticsModal(){
+  STATE.analyticsReqToken++;
   $("analyticsModalBg").classList.add("show");
+  $("anKpis").innerHTML='<div class="an-kpi"><div class="an-label">Loading</div><div class="an-sub">Building analytics…</div></div>';
   /* Defer chart build to next tick so the modal is visible first */
   setTimeout(buildAnalytics, 50);
 }
 
 function buildAnalytics(){
+  var reqToken=STATE.analyticsReqToken;
   var p=STATE.parts;
   var totalParts=p.length;
   var prodParts=p.filter(function(x){return x.mode==="production";});
   var buildCap=prodParts.length?Math.min.apply(null,prodParts.map(function(x){return Math.floor(x.stock/Math.max(1,x.min));})):0;
   var totalValue=p.reduce(function(s,x){return s+x.stock*x.unitPrice;},0);
-  var lowCount=p.filter(function(x){var s=statusOf(x);return s==="out"||s==="low";}).length;
-  $("anKpis").innerHTML=
-    '<div class="an-kpi"><div class="an-label">Total Parts</div><div class="an-val">'+totalParts+'</div><div class="an-sub">in database</div></div>'+
-    '<div class="an-kpi"><div class="an-label">Build Capacity</div><div class="an-val">'+buildCap+'</div><div class="an-sub">SSC units possible</div></div>'+
-    '<div class="an-kpi"><div class="an-label">Inventory Value</div><div class="an-val">'+fmtMoney(totalValue)+'</div><div class="an-sub">stock × unit price</div></div>'+
-    '<div class="an-kpi"><div class="an-label">Need Reorder</div><div class="an-val" style="color:#f87171;">'+lowCount+'</div><div class="an-sub">out or low</div></div>';
-
-  /* Destroy existing charts before recreating */
-  ["chartStatus","chartValue","chartVendor","chartCoverage"].forEach(function(id){
-    if(STATE.charts[id]){STATE.charts[id].destroy();delete STATE.charts[id];}
+  var lowCount=p.filter(function(x){var s=statusOf(x);return s==="out"||s==="low"||s==="warn";}).length;
+  var shortageParts=prodParts.filter(function(x){return (+x.stock||0)<(+x.min||1);});
+  var shortageQty=shortageParts.reduce(function(s,x){return s+Math.max(0,(+x.min||1)-(+x.stock||0));},0);
+  var topVendorVal={name:"-",val:0};
+  var vendorValMap={};
+  p.forEach(function(x){
+    var co=x.company||"Unknown";
+    var lv=(+x.stock||0)*(+x.unitPrice||0);
+    vendorValMap[co]=(vendorValMap[co]||0)+lv;
+    if(vendorValMap[co]>topVendorVal.val)topVendorVal={name:co,val:vendorValMap[co]};
   });
 
-  /* — Chart 1: Stock Health donut — */
-  var cOut=0,cLow=0,cWarn=0,cOk=0;
-  p.forEach(function(x){var s=statusOf(x);if(s==="out")cOut++;else if(s==="low")cLow++;else if(s==="warn")cWarn++;else cOk++;});
-  STATE.charts["chartStatus"]=new Chart($("chartStatus"),{type:"doughnut",data:{labels:["Out","Low","Reorder","OK"],datasets:[{data:[cOut,cLow,cWarn,cOk],backgroundColor:["#ef4444","#f97316","#eab308","#22c55e"],borderWidth:0}]},options:{plugins:{legend:{labels:{color:"#94a3b8",font:{size:11}}}},cutout:"60%",maintainAspectRatio:false}});
+  db.collection("auditLog").orderBy("timestamp","desc").limit(500).get().then(function(snap){
+    if(reqToken!==STATE.analyticsReqToken)return;
+    var logs=[];
+    snap.forEach(function(doc){logs.push(doc.data()||{});});
+    var now=new Date();
+    var dayMap={};
+    var active90={};
+    var recentReceipts=0,recentUsage=0;
+    for(var i=0;i<7;i++){
+      var d=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i);
+      var key=d.toISOString().slice(0,10);
+      dayMap[key]={recv:0,use:0};
+    }
+    logs.forEach(function(log){
+      var dt=log.timestamp&&log.timestamp.toDate?log.timestamp.toDate():null;
+      if(!dt)return;
+      var ageDays=Math.floor((now.getTime()-dt.getTime())/86400000);
+      if(ageDays<=90&&log.partId)active90[log.partId]=true;
+      if(ageDays<=30){
+        if((+log.delta||0)>0)recentReceipts+=(+log.delta||0);
+        if((+log.delta||0)<0)recentUsage+=Math.abs(+log.delta||0);
+      }
+      var key=dt.toISOString().slice(0,10);
+      if(dayMap[key]){
+        if((+log.delta||0)>0)dayMap[key].recv+=(+log.delta||0);
+        if((+log.delta||0)<0)dayMap[key].use+=Math.abs(+log.delta||0);
+      }
+    });
+    var deadStockParts=p.filter(function(x){return (+x.stock||0)>0&&!active90[x.id];});
+    var deadStockValue=deadStockParts.reduce(function(s,x){return s+(+x.stock||0)*(+x.unitPrice||0);},0);
+    var topVendorShare=totalValue>0?Math.round((topVendorVal.val/totalValue)*100):0;
 
-  /* — Chart 2: Top 10 by inventory value (horizontal bar) — */
-  var byVal=p.slice().sort(function(a,b){return(b.stock*b.unitPrice)-(a.stock*a.unitPrice);}).slice(0,10);
-  STATE.charts["chartValue"]=new Chart($("chartValue"),{type:"bar",data:{labels:byVal.map(function(x){return x.name.length>22?x.name.slice(0,22)+"\u2026":x.name;}),datasets:[{data:byVal.map(function(x){return+(x.stock*x.unitPrice).toFixed(2);}),backgroundColor:"rgba(249,115,22,.7)",borderRadius:4}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b",callback:function(v){return"$"+v.toLocaleString();}},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}},maintainAspectRatio:false}});
+    $("anKpis").innerHTML=
+      '<div class="an-kpi"><div class="an-label">Reorder Risk</div><div class="an-val" style="color:#f87171;">'+lowCount+'</div><div class="an-sub">'+shortageQty+' units short vs minimum</div></div>'+
+      '<div class="an-kpi"><div class="an-label">Dead Stock (90d)</div><div class="an-val">'+deadStockParts.length+'</div><div class="an-sub">'+fmtMoney(deadStockValue)+' idle value</div></div>'+
+      '<div class="an-kpi"><div class="an-label">Vendor Concentration</div><div class="an-val">'+topVendorShare+'%</div><div class="an-sub">'+escapeHTML(topVendorVal.name)+' by value</div></div>'+
+      '<div class="an-kpi"><div class="an-label">30d Movement</div><div class="an-val">'+recentReceipts+'/'+recentUsage+'</div><div class="an-sub">received / consumed units</div></div>'+
+      '<div class="an-kpi"><div class="an-label">Build Capacity</div><div class="an-val">'+buildCap+'</div><div class="an-sub">SSC units possible</div></div>'+
+      '<div class="an-kpi"><div class="an-label">Inventory Value</div><div class="an-val">'+fmtMoney(totalValue)+'</div><div class="an-sub">'+totalParts+' total parts</div></div>';
 
-  /* — Chart 3: Parts by vendor — */
-  var vendorMap={};
-  p.forEach(function(x){var co=x.company||"Unknown";vendorMap[co]=(vendorMap[co]||0)+1;});
-  var vendorArr=Object.keys(vendorMap).map(function(k){return{name:k,count:vendorMap[k]};}).sort(function(a,b){return b.count-a.count;}).slice(0,10);
-  STATE.charts["chartVendor"]=new Chart($("chartVendor"),{type:"bar",data:{labels:vendorArr.map(function(x){return x.name.length>18?x.name.slice(0,18)+"\u2026":x.name;}),datasets:[{data:vendorArr.map(function(x){return x.count;}),backgroundColor:"rgba(96,165,250,.7)",borderRadius:4}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b"},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}},maintainAspectRatio:false}});
+    /* Destroy existing charts before recreating */
+    ["chartStatus","chartValue","chartVendor","chartCoverage"].forEach(function(id){
+      if(STATE.charts[id]){STATE.charts[id].destroy();delete STATE.charts[id];}
+    });
 
-  /* — Chart 4: Build coverage per production part — */
-  var covParts=prodParts.slice().sort(function(a,b){return(a.stock/Math.max(1,a.min))-(b.stock/Math.max(1,b.min));}).slice(0,10);
-  STATE.charts["chartCoverage"]=new Chart($("chartCoverage"),{type:"bar",data:{labels:covParts.map(function(x){return x.name.length>22?x.name.slice(0,22)+"\u2026":x.name;}),datasets:[{data:covParts.map(function(x){return Math.floor(x.stock/Math.max(1,x.min));}),backgroundColor:covParts.map(function(x){var v=Math.floor(x.stock/Math.max(1,x.min));return v<=0?"rgba(239,68,68,.7)":v<2?"rgba(249,115,22,.7)":"rgba(34,197,94,.7)";}),borderRadius:4}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b"},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}},maintainAspectRatio:false}});
+    /* — Chart 1: Stock Health donut — */
+    var cOut=0,cLow=0,cWarn=0,cOk=0;
+    p.forEach(function(x){var s=statusOf(x);if(s==="out")cOut++;else if(s==="low")cLow++;else if(s==="warn")cWarn++;else cOk++;});
+    STATE.charts["chartStatus"]=new Chart($("chartStatus"),{type:"doughnut",data:{labels:["Out","Low","Reorder","OK"],datasets:[{data:[cOut,cLow,cWarn,cOk],backgroundColor:["#ef4444","#f97316","#eab308","#22c55e"],borderWidth:0}]},options:{plugins:{legend:{labels:{color:"#94a3b8",font:{size:11}}}},cutout:"60%",maintainAspectRatio:false}});
+
+    /* — Chart 2: Highest shortage parts — */
+    var shortage=prodParts.map(function(x){return{name:x.name,missing:Math.max(0,(+x.min||1)-(+x.stock||0))};}).filter(function(x){return x.missing>0;}).sort(function(a,b){return b.missing-a.missing;}).slice(0,10);
+    STATE.charts["chartValue"]=new Chart($("chartValue"),{type:"bar",data:{labels:shortage.map(function(x){return x.name.length>22?x.name.slice(0,22)+"\u2026":x.name;}),datasets:[{data:shortage.map(function(x){return x.missing;}),backgroundColor:"rgba(239,68,68,.75)",borderRadius:4}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b"},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}},maintainAspectRatio:false}});
+
+    /* — Chart 3: Vendor concentration by value — */
+    var vendorArr=Object.keys(vendorValMap).map(function(k){return{name:k,val:+vendorValMap[k].toFixed(2)};}).sort(function(a,b){return b.val-a.val;}).slice(0,10);
+    STATE.charts["chartVendor"]=new Chart($("chartVendor"),{type:"bar",data:{labels:vendorArr.map(function(x){return x.name.length>18?x.name.slice(0,18)+"\u2026":x.name;}),datasets:[{data:vendorArr.map(function(x){return x.val;}),backgroundColor:"rgba(96,165,250,.75)",borderRadius:4}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b",callback:function(v){return"$"+v.toLocaleString();}},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}},maintainAspectRatio:false}});
+
+    /* — Chart 4: Recent movement (7d) — */
+    var dayKeys=Object.keys(dayMap).sort();
+    STATE.charts["chartCoverage"]=new Chart($("chartCoverage"),{type:"line",data:{labels:dayKeys.map(function(k){return k.slice(5);}),datasets:[{label:"Received",data:dayKeys.map(function(k){return dayMap[k].recv;}),borderColor:"rgba(34,197,94,1)",backgroundColor:"rgba(34,197,94,.2)",tension:.25,fill:true},{label:"Consumed",data:dayKeys.map(function(k){return dayMap[k].use;}),borderColor:"rgba(249,115,22,1)",backgroundColor:"rgba(249,115,22,.2)",tension:.25,fill:true}]},options:{plugins:{legend:{labels:{color:"#94a3b8"}}},scales:{x:{ticks:{color:"#94a3b8"},grid:{color:"#1f2937"}},y:{ticks:{color:"#64748b"},grid:{color:"#1f2937"}}},maintainAspectRatio:false}});
+  }).catch(function(err){
+    console.warn("[Analytics]",err&&err.message?err.message:err);
+    $("anKpis").innerHTML=
+      '<div class="an-kpi"><div class="an-label">Reorder Risk</div><div class="an-val" style="color:#f87171;">'+lowCount+'</div><div class="an-sub">movement data unavailable</div></div>'+
+      '<div class="an-kpi"><div class="an-label">Build Capacity</div><div class="an-val">'+buildCap+'</div><div class="an-sub">SSC units possible</div></div>'+
+      '<div class="an-kpi"><div class="an-label">Inventory Value</div><div class="an-val">'+fmtMoney(totalValue)+'</div><div class="an-sub">'+totalParts+' total parts</div></div>';
+  });
 }
 
 /* ========== PHASE 3: VENDOR MANAGEMENT ========== */
@@ -2017,32 +2310,76 @@ function updateQRCount(){
   $("qrSelectedCount").textContent=checked+" part(s) selected";
 }
 
-function printQRLabels(){
+function getSelectedQRParts(){
   var checked=Array.from(document.querySelectorAll("#qrPartList input[type=checkbox]:checked")).map(function(cb){return cb.value;});
-  if(!checked.length){showToast("Select at least one part","error");return;}
-  var selectedParts=STATE.parts.filter(function(p){return checked.includes(p.id);});
-  /* Generate QR data URLs for all selected parts, then open print window */
+  if(!checked.length)return[];
+  return STATE.parts.filter(function(p){return checked.includes(p.id);});
+}
+
+function generateQRLabelItems(selectedParts){
   var promises=selectedParts.map(function(p){
     return QRCode.toDataURL(p.partNumber,{width:120,margin:1,color:{dark:"#000000",light:"#ffffff"}})
       .then(function(url){return{part:p,qrUrl:url};});
   });
-  Promise.all(promises).then(function(items){
-    var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>QR Labels</title>'
-      +'<style>body{font-family:sans-serif;background:white;}@page{size:A4;margin:8mm;}.label-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm;}.label-item{border:1px solid #ccc;border-radius:3px;padding:3mm;display:flex;flex-direction:column;align-items:center;gap:2mm;page-break-inside:avoid;}.label-item img{width:90px;height:90px;}.l-name{font-size:8pt;font-weight:700;text-align:center;word-break:break-word;color:#000;max-width:90px;}.l-pn{font-size:7pt;font-family:monospace;color:#333;}.l-co{font-size:6.5pt;color:#555;text-align:center;}</style>'
-      +'</head><body><div class="label-grid">'
-      +items.map(function(item){
-        var p=item.part;
-        return'<div class="label-item">'
-          +'<img src="'+item.qrUrl+'" alt="QR code for '+escapeHTML(p.partNumber)+'" />'
-          +'<div class="l-name">'+escapeHTML(p.name.length>40?p.name.slice(0,40)+"\u2026":p.name)+'</div>'
-          +'<div class="l-pn">'+escapeHTML(p.partNumber)+'</div>'
-          +'<div class="l-co">'+escapeHTML(p.company)+'</div>'
-          +'</div>';
-      }).join("")
-      +'</div><script>window.onload=function(){window.print();}<\/script></body></html>';
-    var w=window.open("","_blank","width=900,height=700");
-    if(w){w.document.write(html);w.document.close();}
-    else{showToast("Pop-up blocked — allow pop-ups to print labels","error");}
+  return Promise.all(promises);
+}
+
+function openPrintableQRWindow(items){
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>QR Labels</title>'
+    +'<style>body{font-family:sans-serif;background:white;}@page{size:A4;margin:8mm;}.label-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm;}.label-item{border:1px solid #ccc;border-radius:3px;padding:3mm;display:flex;flex-direction:column;align-items:center;gap:2mm;page-break-inside:avoid;}.label-item img{width:90px;height:90px;}.l-name{font-size:8pt;font-weight:700;text-align:center;word-break:break-word;color:#000;max-width:90px;}.l-pn{font-size:7pt;font-family:monospace;color:#333;}.l-co{font-size:6.5pt;color:#555;text-align:center;}</style>'
+    +'</head><body><div class="label-grid">'
+    +items.map(function(item){
+      var p=item.part;
+      return'<div class="label-item">'
+        +'<img src="'+item.qrUrl+'" alt="QR code for '+escapeHTML(p.partNumber)+'" />'
+        +'<div class="l-name">'+escapeHTML(p.name.length>40?p.name.slice(0,40)+"\u2026":p.name)+'</div>'
+        +'<div class="l-pn">'+escapeHTML(p.partNumber)+'</div>'
+        +'<div class="l-co">'+escapeHTML(p.company)+'</div>'
+        +'</div>';
+    }).join("")
+    +'</div><script>window.onload=function(){window.print();}<\/script></body></html>';
+  var w=window.open("","_blank","width=900,height=700");
+  if(!w)return false;
+  w.document.write(html);
+  w.document.close();
+  return true;
+}
+
+function downloadQRLabelsPDF(items){
+  if(!(window.jspdf&&window.jspdf.jsPDF)){showToast("PDF library failed to load","error");return;}
+  var doc=new window.jspdf.jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+  var marginX=8,marginY=8,colGap=5,rowGap=4,labelW=63,labelH=42,cols=3,rowsPerPage=6;
+  items.forEach(function(item,idx){
+    if(idx>0&&idx%(cols*rowsPerPage)===0)doc.addPage();
+    var slot=idx%(cols*rowsPerPage);
+    var col=slot%cols;
+    var row=Math.floor(slot/cols);
+    var x=marginX+col*(labelW+colGap);
+    var y=marginY+row*(labelH+rowGap);
+    doc.setDrawColor(190,190,190);
+    doc.rect(x,y,labelW,labelH);
+    doc.addImage(item.qrUrl,"PNG",x+2,y+2,18,18);
+    doc.setFontSize(8);
+    var nm=item.part.name||"";
+    var nmLines=doc.splitTextToSize(nm,labelW-24).slice(0,3);
+    doc.text(nmLines,x+22,y+6);
+    doc.setFontSize(7);
+    doc.text("PN: "+(item.part.partNumber||"-"),x+22,y+22);
+    doc.text((item.part.company||"-"),x+22,y+27);
+    doc.text("Stock: "+(item.part.stock||0),x+22,y+32);
+  });
+  doc.save("qr-labels-"+new Date().toISOString().slice(0,10)+".pdf");
+  showToast("PDF downloaded","success");
+}
+
+function printQRLabels(){
+  var selectedParts=getSelectedQRParts();
+  if(!selectedParts.length){showToast("Select at least one part","error");return;}
+  generateQRLabelItems(selectedParts).then(function(items){
+    var opened=openPrintableQRWindow(items);
+    if(opened){showToast("Print window opened","success");return;}
+    showToast("Pop-up blocked. Downloading PDF fallback…","error");
+    downloadQRLabelsPDF(items);
   }).catch(function(e){showToast("QR generation failed: "+e.message,"error");});
 }
 
@@ -2110,6 +2447,11 @@ $("qrModalBg").addEventListener("click",function(e){if(e.target.id==="qrModalBg"
 $("qrSelectAll").addEventListener("click",function(){document.querySelectorAll("#qrPartList input[type=checkbox]").forEach(function(cb){cb.checked=true;});updateQRCount();});
 $("qrSelectNone").addEventListener("click",function(){document.querySelectorAll("#qrPartList input[type=checkbox]").forEach(function(cb){cb.checked=false;});updateQRCount();});
 $("qrPrintBtn").addEventListener("click",printQRLabels);
+$("qrPdfBtn").addEventListener("click",function(){
+  var selectedParts=getSelectedQRParts();
+  if(!selectedParts.length){showToast("Select at least one part","error");return;}
+  generateQRLabelItems(selectedParts).then(downloadQRLabelsPDF).catch(function(e){showToast("QR generation failed: "+e.message,"error");});
+});
 
 $("notifBtn").addEventListener("click",requestNotificationPermission);
 
