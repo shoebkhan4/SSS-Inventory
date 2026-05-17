@@ -15,7 +15,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(function(e){ console.warn("[SW] Registration failed:", e); });
@@ -209,8 +209,9 @@ td.actions { white-space: nowrap; }
 .an-kpi .an-val { font-size: 22px; font-weight: 700; color: #f8fafc; }
 .an-kpi .an-sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
 .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-.chart-box { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px; }
-.chart-box h4 { margin: 0 0 10px; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
+.chart-box { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px; overflow: hidden; }
+.chart-box h4 { margin: 0 0 8px; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
+.chart-canvas-wrap { position: relative; height: 190px; width: 100%; }
 @media (max-width: 600px) { .chart-row { grid-template-columns: 1fr; } }
 /* ===== PHASE 3: VENDORS ===== */
 .vendor-card { background: #0f172a; border: 1px solid #1f2937; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; cursor: pointer; transition: border-color .15s; }
@@ -225,7 +226,10 @@ td.actions { white-space: nowrap; }
 .qr-part-row .qr-pn { font-size: 11px; color: #64748b; font-family: ui-monospace, monospace; }
 @media print {
   .no-print { display: none !important; }
-  body { background: white; color: black; }
+  /* QR label in-page print */
+  body > *:not(#qrPrintArea) { display: none !important; }
+  #qrPrintArea { display: block !important; }
+  #qrPrintArea body { background: white; color: black; }
   .label-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; padding: 8mm; }
   .label-item { border: 1px solid #ccc; border-radius: 4px; padding: 4mm; display: flex; flex-direction: column; align-items: center; gap: 3mm; page-break-inside: avoid; }
   .label-item .l-name { font-size: 9pt; font-weight: 700; text-align: center; color: black; word-break: break-word; }
@@ -332,7 +336,7 @@ td.actions { white-space: nowrap; }
     <button id="historyBtn" class="btn btn-ghost">&#x1F4CB; History</button>
     <button id="poBtn" class="btn btn-ghost">&#x1F6D2; Orders</button>
     <button id="addBtn" class="btn btn-primary admin-only">+ Add Part</button>
-    <button id="fetchSpareImagesBtn" class="btn btn-ghost admin-only">&#x1F5BC; Fill Spare Images</button>
+    <button id="fetchSpareImagesBtn" class="btn btn-ghost admin-only">&#x1F5BC; Fill Part Images</button>
     <button id="importBtn" class="btn btn-ghost admin-only">&#x2B06; Import CSV</button>
     <button id="auditBtn" class="btn btn-ghost" aria-label="Audit Log">&#x1F4CB; Audit Log</button>
     <button id="analyticsBtn" class="btn btn-ghost">&#x1F4CA; Analytics</button>
@@ -353,7 +357,7 @@ td.actions { white-space: nowrap; }
       <th data-sort="company">Company</th>
       <th data-sort="partNumber">Part #</th>
       <th data-sort="min" class="num">Req / SSC</th>
-      <th data-sort="stock" class="num">Stock</th>
+      <th data-sort="stock" class="num" id="thStock">Stock</th>
       <th data-sort="status">Status</th>
       <th data-sort="unitPrice" class="price">Unit $</th>
       <th data-sort="lineValue" class="price">Line $</th>
@@ -459,6 +463,11 @@ td.actions { white-space: nowrap; }
   <label>Unit Price ($)</label><input id="editPrice" type="number" min="0" step="0.01" />
   <label>Mode</label><select id="editMode"><option value="production">Production</option><option value="spare">Spare</option></select>
   <label>Image URL <span class="label-hint">(optional)</span></label><input id="editImageUrl" type="url" placeholder="https://..." />
+  <div style="display:flex;align-items:center;gap:8px;margin-top:-6px;">
+    <button type="button" id="editImageUploadBtn" class="btn btn-ghost" style="font-size:12px;padding:5px 10px;">&#x1F4F7; Upload from Device</button>
+    <input type="file" id="editImageFile" accept="image/*" style="display:none;" />
+  </div>
+  <img id="editImagePreview" style="max-width:100%;max-height:80px;margin-top:4px;display:none;border-radius:6px;object-fit:contain;background:#0b1220;" alt="Image preview" />
   <div class="actions"><button class="btn btn-ghost" id="editCancel">Cancel</button><button class="btn btn-primary" id="editSave">Save Changes</button></div>
 </div></div>
 
@@ -614,12 +623,12 @@ td.actions { white-space: nowrap; }
   <h2>&#x1F4CA; Analytics Dashboard</h2>
   <div class="analytics-grid" id="anKpis"></div>
   <div class="chart-row">
-    <div class="chart-box"><h4>Stock Health</h4><canvas id="chartStatus" height="200"></canvas></div>
-    <div class="chart-box"><h4>Top Shortage Parts (Missing vs Min)</h4><canvas id="chartValue" height="200"></canvas></div>
+    <div class="chart-box"><h4>Stock Health</h4><div class="chart-canvas-wrap"><canvas id="chartStatus"></canvas></div></div>
+    <div class="chart-box"><h4>Top Shortage Parts (Missing vs Min)</h4><div class="chart-canvas-wrap"><canvas id="chartValue"></canvas></div></div>
   </div>
   <div class="chart-row">
-    <div class="chart-box"><h4>Vendor Concentration by Inventory Value</h4><canvas id="chartVendor" height="200"></canvas></div>
-    <div class="chart-box"><h4>Recent Stock Movement (Last 7 Days)</h4><canvas id="chartCoverage" height="200"></canvas></div>
+    <div class="chart-box"><h4>Vendor Concentration by Inventory Value</h4><div class="chart-canvas-wrap"><canvas id="chartVendor"></canvas></div></div>
+    <div class="chart-box"><h4>Recent Stock Movement (Last 7 Days)</h4><div class="chart-canvas-wrap"><canvas id="chartCoverage"></canvas></div></div>
   </div>
   <div class="actions"><button class="btn btn-ghost" id="analyticsClose">Close</button></div>
 </div></div>
@@ -677,6 +686,8 @@ td.actions { white-space: nowrap; }
 </div></div>
 
 <div class="toast" id="toast"></div>
+<!-- QR in-page print area — populated dynamically, shown only via @media print -->
+<div id="qrPrintArea" style="display:none;"></div>
 
 <script>
 /* ========== FIREBASE CONFIG ========== */
@@ -762,58 +773,58 @@ function doRegister() {
 
 /* ========== FULL BOM ========== */
 var INITIAL_PARTS=[
-{id:"1",sn:1,name:'HMI 12" (SSC)',company:"Beijer",partNumber:"X2 Extreme 12",min:1,stock:0,unitPrice:3000,mode:"production"},
-{id:"2",sn:2,name:'HMI 7" (SSP)',company:"Beijer",partNumber:"X2 Extreme 7",min:1,stock:3,unitPrice:1200,mode:"production"},
-{id:"3",sn:3,name:"SOV1, SOV2 - Solenoid Valve, 2-way NC, 150C, PTFE, 24 VDC (SSP)",company:"M&C / Any Other",partNumber:"SWS201Z1020",min:2,stock:0,unitPrice:325,mode:"production"},
-{id:"4",sn:4,name:"Controller PFC200; 2nd Gen; 2x ETHERNET, RS-232/-485",company:"WAGO",partNumber:"750-8212",min:1,stock:0,unitPrice:871.93,mode:"production"},
-{id:"5",sn:5,name:"8-channel digital input; 24 VDC; 3 ms",company:"WAGO",partNumber:"750-1415",min:1,stock:0,unitPrice:65.94,mode:"production"},
-{id:"6",sn:6,name:"8-channel digital output; 24 VDC; 0.5 A, Diagnostics",company:"WAGO",partNumber:"750-537",min:3,stock:0,unitPrice:91.28,mode:"production"},
-{id:"7",sn:7,name:"4-channel analog input; Resistance measurement; Adjustable",company:"WAGO",partNumber:"750-450",min:3,stock:0,unitPrice:275.20,mode:"production"},
-{id:"8",sn:8,name:"4-channel analog input; 4-20 mA; Single-ended",company:"WAGO",partNumber:"750-455",min:1,stock:0,unitPrice:223.16,mode:"production"},
-{id:"9",sn:9,name:"4-channel analog output; 4-20 mA",company:"WAGO",partNumber:"750-555",min:2,stock:0,unitPrice:240,mode:"production"},
-{id:"10",sn:10,name:"RS-232/485 Serial Interface",company:"WAGO",partNumber:"750-652",min:2,stock:0,unitPrice:354.22,mode:"production"},
-{id:"11",sn:11,name:"End Module",company:"WAGO",partNumber:"750-600",min:1,stock:0,unitPrice:16.35,mode:"production"},
-{id:"12",sn:12,name:"Power Supply Unit",company:"TRACO POWER",partNumber:"TIB120-124EX",min:1,stock:0,unitPrice:160,mode:"production"},
-{id:"13",sn:13,name:"Relay 1",company:"Schneider Electric",partNumber:"9AS3D24",min:2,stock:0,unitPrice:16,mode:"production"},
-{id:"14",sn:14,name:"Relay 2",company:"Phoenix Contact",partNumber:"2900306",min:3,stock:0,unitPrice:18,mode:"production"},
-{id:"15",sn:15,name:"SSR",company:"Crydom",partNumber:"D2450",min:6,stock:0,unitPrice:64,mode:"production"},
-{id:"16",sn:16,name:"Plastic Cover for SSR",company:"Crydom",partNumber:"KS-100",min:6,stock:0,unitPrice:6,mode:"production"},
-{id:"17",sn:17,name:"Z Purge indicator, C1Z2, 24VDC, 316SS",company:"Purge Solutions",partNumber:"PSCZ-2S1",min:1,stock:0,unitPrice:1800,mode:"production"},
-{id:"18",sn:18,name:"PSO-SMLC-S",company:"Purge Solutions",partNumber:"180822",min:1,stock:0,unitPrice:880,mode:"production"},
-{id:"19",sn:19,name:"Differential Pressure Transmitter, 5in WC, 24VDC/4-20mA, +/-0.25% FS",company:"Setra",partNumber:"2651005WD11T1C",min:1,stock:0,unitPrice:299.73,mode:"production"},
-{id:"20",sn:20,name:"Velocimeter SOV - CR 3-Way Fully-Ported Valve, Manifold Mount, Wire Leads, 24VDC",company:"Takmeel Global",partNumber:"CR-EVO-3M-24",min:5,stock:0,unitPrice:80.33,mode:"production"},
-{id:"21",sn:21,name:'SS316 Back Mount Plate, Enclosure 24x24x12in, IP66',company:"Brij Machine",partNumber:"NA",min:1,stock:0,unitPrice:1035.42,mode:"production"},
-{id:"22",sn:22,name:"External Enclosure-Mount Heat Sink for 8 SSR (430x230mm)",company:"Wellste",partNumber:"W200xH37",min:1,stock:0,unitPrice:70,mode:"production"},
-{id:"23",sn:23,name:"4 mm2 Fuse Terminal Blocks (Pack of 25)",company:"ConnectWell",partNumber:"CAFL4U",min:9,stock:223,unitPrice:517.33,mode:"production"},
-{id:"24",sn:24,name:"End Plate Terminal for CAFL4U",company:"ConnectWell",partNumber:"EPCAFL4U",min:3,stock:91,unitPrice:21.33,mode:"production"},
-{id:"25",sn:25,name:"External Comb Shorting Link for CAFL4U, 2-pole",company:"Mouser / Altech / ConnectWell",partNumber:"CA716/2",min:2,stock:0,unitPrice:1.47,mode:"production"},
-{id:"26",sn:26,name:"External Comb Shorting Link for CAFL4U, 3-pole",company:"Mouser / Altech / ConnectWell",partNumber:"CA716/3",min:2,stock:0,unitPrice:3.20,mode:"production"},
-{id:"27",sn:27,name:"External Comb Shorting Link for CAFL4U, 4-pole",company:"Mouser / Altech / ConnectWell",partNumber:"CA716/4",min:2,stock:0,unitPrice:4.02,mode:"production"},
-{id:"28",sn:28,name:"External Comb Shorting Link for CAFL4U, 10-pole",company:"Mouser / Altech / ConnectWell",partNumber:"CA716/10",min:2,stock:0,unitPrice:4.08,mode:"production"},
-{id:"29",sn:29,name:"Ground Terminal, DIN, UL/CSA (Pack of 50)",company:"Automation Direct",partNumber:"DN-G10",min:8,stock:0,unitPrice:354,mode:"production"},
-{id:"30",sn:30,name:"Konnect-It Double-Level Feedthrough Terminal Block - Black, 26-10 AWG, 30A (Pack of 100)",company:"Automation Direct",partNumber:"KN-D10BLK",min:20,stock:0,unitPrice:226,mode:"production"},
-{id:"31",sn:31,name:"Konnect-It Double-Level Feedthrough Terminal Block - Gray, 26-10 AWG, 30A (Pack of 100)",company:"Automation Direct",partNumber:"KN-D10GRY",min:40,stock:0,unitPrice:226,mode:"production"},
-{id:"32",sn:32,name:"Terminal Block Jumper, 2-pole, 32A, 750V (Pack of 25)",company:"Automation Direct",partNumber:"KN-2J10",min:3,stock:0,unitPrice:17,mode:"production"},
-{id:"33",sn:33,name:"Terminal Block Jumper, 3-pole, 32A, 750V (Pack of 25)",company:"Automation Direct",partNumber:"KN-3J10",min:2,stock:0,unitPrice:20.50,mode:"production"},
-{id:"34",sn:34,name:"Terminal Block Jumper, 4-pole, 32A, 750V (Pack of 15)",company:"Automation Direct",partNumber:"KN-4J10",min:1,stock:0,unitPrice:20.50,mode:"production"},
-{id:"35",sn:35,name:"Terminal Block Jumper, 10-pole, 32A, 750V (Pack of 5)",company:"Automation Direct",partNumber:"KN-10J10",min:2,stock:0,unitPrice:14.50,mode:"production"},
-{id:"36",sn:36,name:"Konnect-It Triple-Level Feedthrough Terminal Block w/ Ground, 24-12 AWG, Gray (Pack of 20)",company:"Automation Direct",partNumber:"KN-TG12",min:12,stock:0,unitPrice:157,mode:"production"},
-{id:"37",sn:37,name:"Triple-Level Feedthrough Terminal Block End Cover, Gray (Pack of 10)",company:"Automation Direct",partNumber:"KN-ECTG12",min:3,stock:0,unitPrice:47.50,mode:"production"},
-{id:"38",sn:38,name:"Konnect-It Single-Level Feedthrough Terminal Block, 12-2 AWG, Gray, 115A (Pack of 40)",company:"Automation Direct",partNumber:"KN-T2GRY",min:7,stock:0,unitPrice:158,mode:"production"},
-{id:"39",sn:39,name:"Terminal Block Jumper, 2-pole, 125A, 750V (Pack of 25)",company:"Automation Direct",partNumber:"KN-2J2",min:2,stock:0,unitPrice:36,mode:"production"},
-{id:"40",sn:40,name:"Terminal Block Separator, Gray (Pack of 10)",company:"Automation Direct",partNumber:"KN-ST3GRY",min:2,stock:0,unitPrice:24,mode:"production"},
-{id:"41",sn:41,name:"DINnector Grounding Terminal Block, 20-6 AWG, Green/Yellow (Pack of 50)",company:"Automation Direct",partNumber:"DN-G6",min:12,stock:0,unitPrice:464,mode:"production"},
-{id:"42",sn:42,name:"Terminal Block End Cover, Orange (Pack of 10)",company:"Automation Direct",partNumber:"KN-ECDORG",min:10,stock:0,unitPrice:9,mode:"production"},
-{id:"43",sn:43,name:"Terminal Block End Cover, Green (Pack of 10)",company:"Automation Direct",partNumber:"KN-ECDGRN",min:10,stock:0,unitPrice:9,mode:"production"},
-{id:"44",sn:44,name:"DINnector Screw-Down End Bracket, 9mm - Stopper Grey (Pack of 50)",company:"Automation Direct",partNumber:"DN-EB35",min:21,stock:0,unitPrice:98,mode:"production"},
-{id:"45",sn:45,name:"DINnector Screw-Down End Bracket, 6mm - Stopper Black (Optional, Pack of 50)",company:"Automation Direct",partNumber:"DN-EB35-A",min:21,stock:0,unitPrice:74,mode:"spare"},
-{id:"46",sn:46,name:"FUSE 5A (Pack of 5)",company:"Automation Direct",partNumber:"ABC5",min:3,stock:41,unitPrice:135.30,mode:"production"},
-{id:"47",sn:47,name:"FUSE 1A (Pack of 5)",company:"Automation Direct",partNumber:"ABC1",min:1,stock:47,unitPrice:144,mode:"production"},
-{id:"48",sn:48,name:"FUSE 10A (Pack of 5)",company:"Automation Direct",partNumber:"MDA10",min:4,stock:38,unitPrice:247,mode:"production"},
-{id:"49",sn:49,name:"FUSE 8A (Pack of 5)",company:"Automation Direct",partNumber:"MDA8",min:1,stock:47,unitPrice:247,mode:"production"},
-{id:"50",sn:50,name:"Gladiator MCB, 25A, 480Y/277VAC/125VDC, 2-pole, B-curve, 10kA",company:"Automation Direct",partNumber:"GMCBU-2B-25",min:1,stock:2,unitPrice:225,mode:"production"},
-{id:"51",sn:51,name:'Konnect-It Marking Tag, 5x5mm, Single Character "S" (Pack of 250)',company:"Automation Direct",partNumber:"KN-L5-S-250",min:1,stock:0,unitPrice:16,mode:"production"},
-{id:"52",sn:52,name:"Konnect-It Marking Tag, 5x5mm, Numbered 1-10 (Pack of 500)",company:"Automation Direct",partNumber:"KN-L5-1-10",min:15,stock:0,unitPrice:32,mode:"production"}
+{id:"1",sn:1,name:'HMI 12" (SSC)',company:"Beijer",partNumber:"X2 Extreme 12",min:1,stock:0,unitPrice:3000,spareStock:0,mode:"production"},
+{id:"2",sn:2,name:'HMI 7" (SSP)',company:"Beijer",partNumber:"X2 Extreme 7",min:1,stock:3,unitPrice:1200,spareStock:0,mode:"production"},
+{id:"3",sn:3,name:"SOV1, SOV2 - Solenoid Valve, 2-way NC, 150C, PTFE, 24 VDC (SSP)",company:"M&C / Any Other",partNumber:"SWS201Z1020",min:2,stock:0,unitPrice:325,spareStock:0,mode:"production"},
+{id:"4",sn:4,name:"Controller PFC200; 2nd Gen; 2x ETHERNET, RS-232/-485",company:"WAGO",partNumber:"750-8212",min:1,stock:0,unitPrice:871.93,spareStock:0,mode:"production"},
+{id:"5",sn:5,name:"8-channel digital input; 24 VDC; 3 ms",company:"WAGO",partNumber:"750-1415",min:1,stock:0,unitPrice:65.94,spareStock:0,mode:"production"},
+{id:"6",sn:6,name:"8-channel digital output; 24 VDC; 0.5 A, Diagnostics",company:"WAGO",partNumber:"750-537",min:3,stock:0,unitPrice:91.28,spareStock:0,mode:"production"},
+{id:"7",sn:7,name:"4-channel analog input; Resistance measurement; Adjustable",company:"WAGO",partNumber:"750-450",min:3,stock:0,unitPrice:275.20,spareStock:0,mode:"production"},
+{id:"8",sn:8,name:"4-channel analog input; 4-20 mA; Single-ended",company:"WAGO",partNumber:"750-455",min:1,stock:0,unitPrice:223.16,spareStock:0,mode:"production"},
+{id:"9",sn:9,name:"4-channel analog output; 4-20 mA",company:"WAGO",partNumber:"750-555",min:2,stock:0,unitPrice:240,spareStock:0,mode:"production"},
+{id:"10",sn:10,name:"RS-232/485 Serial Interface",company:"WAGO",partNumber:"750-652",min:2,stock:0,unitPrice:354.22,spareStock:0,mode:"production"},
+{id:"11",sn:11,name:"End Module",company:"WAGO",partNumber:"750-600",min:1,stock:0,unitPrice:16.35,spareStock:0,mode:"production"},
+{id:"12",sn:12,name:"Power Supply Unit",company:"TRACO POWER",partNumber:"TIB120-124EX",min:1,stock:0,unitPrice:160,spareStock:0,mode:"production"},
+{id:"13",sn:13,name:"Relay 1",company:"Schneider Electric",partNumber:"9AS3D24",min:2,stock:0,unitPrice:16,spareStock:0,mode:"production"},
+{id:"14",sn:14,name:"Relay 2",company:"Phoenix Contact",partNumber:"2900306",min:3,stock:0,unitPrice:18,spareStock:0,mode:"production"},
+{id:"15",sn:15,name:"SSR",company:"Crydom",partNumber:"D2450",min:6,stock:0,unitPrice:64,spareStock:0,mode:"production"},
+{id:"16",sn:16,name:"Plastic Cover for SSR",company:"Crydom",partNumber:"KS-100",min:6,stock:0,unitPrice:6,spareStock:0,mode:"production"},
+{id:"17",sn:17,name:"Z Purge indicator, C1Z2, 24VDC, 316SS",company:"Purge Solutions",partNumber:"PSCZ-2S1",min:1,stock:0,unitPrice:1800,spareStock:0,mode:"production"},
+{id:"18",sn:18,name:"PSO-SMLC-S",company:"Purge Solutions",partNumber:"180822",min:1,stock:0,unitPrice:880,spareStock:0,mode:"production"},
+{id:"19",sn:19,name:"Differential Pressure Transmitter, 5in WC, 24VDC/4-20mA, +/-0.25% FS",company:"Setra",partNumber:"2651005WD11T1C",min:1,stock:0,unitPrice:299.73,spareStock:0,mode:"production"},
+{id:"20",sn:20,name:"Velocimeter SOV - CR 3-Way Fully-Ported Valve, Manifold Mount, Wire Leads, 24VDC",company:"Takmeel Global",partNumber:"CR-EVO-3M-24",min:5,stock:0,unitPrice:80.33,spareStock:0,mode:"production"},
+{id:"21",sn:21,name:'SS316 Back Mount Plate, Enclosure 24x24x12in, IP66',company:"Brij Machine",partNumber:"NA",min:1,stock:0,unitPrice:1035.42,spareStock:0,mode:"production"},
+{id:"22",sn:22,name:"External Enclosure-Mount Heat Sink for 8 SSR (430x230mm)",company:"Wellste",partNumber:"W200xH37",min:1,stock:0,unitPrice:70,spareStock:0,mode:"production"},
+{id:"23",sn:23,name:"4 mm2 Fuse Terminal Blocks (Pack of 25)",company:"ConnectWell",partNumber:"CAFL4U",min:9,stock:223,unitPrice:517.33,spareStock:0,mode:"production"},
+{id:"24",sn:24,name:"End Plate Terminal for CAFL4U",company:"ConnectWell",partNumber:"EPCAFL4U",min:3,stock:91,unitPrice:21.33,spareStock:0,mode:"production"},
+{id:"25",sn:25,name:"External Comb Shorting Link for CAFL4U, 2-pole",company:"Mouser / Altech / ConnectWell",partNumber:"CA716/2",min:2,stock:0,unitPrice:1.47,spareStock:0,mode:"production"},
+{id:"26",sn:26,name:"External Comb Shorting Link for CAFL4U, 3-pole",company:"Mouser / Altech / ConnectWell",partNumber:"CA716/3",min:2,stock:0,unitPrice:3.20,spareStock:0,mode:"production"},
+{id:"27",sn:27,name:"External Comb Shorting Link for CAFL4U, 4-pole",company:"Mouser / Altech / ConnectWell",partNumber:"CA716/4",min:2,stock:0,unitPrice:4.02,spareStock:0,mode:"production"},
+{id:"28",sn:28,name:"External Comb Shorting Link for CAFL4U, 10-pole",company:"Mouser / Altech / ConnectWell",partNumber:"CA716/10",min:2,stock:0,unitPrice:4.08,spareStock:0,mode:"production"},
+{id:"29",sn:29,name:"Ground Terminal, DIN, UL/CSA (Pack of 50)",company:"Automation Direct",partNumber:"DN-G10",min:8,stock:0,unitPrice:354,spareStock:0,mode:"production"},
+{id:"30",sn:30,name:"Konnect-It Double-Level Feedthrough Terminal Block - Black, 26-10 AWG, 30A (Pack of 100)",company:"Automation Direct",partNumber:"KN-D10BLK",min:20,stock:0,unitPrice:226,spareStock:0,mode:"production"},
+{id:"31",sn:31,name:"Konnect-It Double-Level Feedthrough Terminal Block - Gray, 26-10 AWG, 30A (Pack of 100)",company:"Automation Direct",partNumber:"KN-D10GRY",min:40,stock:0,unitPrice:226,spareStock:0,mode:"production"},
+{id:"32",sn:32,name:"Terminal Block Jumper, 2-pole, 32A, 750V (Pack of 25)",company:"Automation Direct",partNumber:"KN-2J10",min:3,stock:0,unitPrice:17,spareStock:0,mode:"production"},
+{id:"33",sn:33,name:"Terminal Block Jumper, 3-pole, 32A, 750V (Pack of 25)",company:"Automation Direct",partNumber:"KN-3J10",min:2,stock:0,unitPrice:20.50,spareStock:0,mode:"production"},
+{id:"34",sn:34,name:"Terminal Block Jumper, 4-pole, 32A, 750V (Pack of 15)",company:"Automation Direct",partNumber:"KN-4J10",min:1,stock:0,unitPrice:20.50,spareStock:0,mode:"production"},
+{id:"35",sn:35,name:"Terminal Block Jumper, 10-pole, 32A, 750V (Pack of 5)",company:"Automation Direct",partNumber:"KN-10J10",min:2,stock:0,unitPrice:14.50,spareStock:0,mode:"production"},
+{id:"36",sn:36,name:"Konnect-It Triple-Level Feedthrough Terminal Block w/ Ground, 24-12 AWG, Gray (Pack of 20)",company:"Automation Direct",partNumber:"KN-TG12",min:12,stock:0,unitPrice:157,spareStock:0,mode:"production"},
+{id:"37",sn:37,name:"Triple-Level Feedthrough Terminal Block End Cover, Gray (Pack of 10)",company:"Automation Direct",partNumber:"KN-ECTG12",min:3,stock:0,unitPrice:47.50,spareStock:0,mode:"production"},
+{id:"38",sn:38,name:"Konnect-It Single-Level Feedthrough Terminal Block, 12-2 AWG, Gray, 115A (Pack of 40)",company:"Automation Direct",partNumber:"KN-T2GRY",min:7,stock:0,unitPrice:158,spareStock:0,mode:"production"},
+{id:"39",sn:39,name:"Terminal Block Jumper, 2-pole, 125A, 750V (Pack of 25)",company:"Automation Direct",partNumber:"KN-2J2",min:2,stock:0,unitPrice:36,spareStock:0,mode:"production"},
+{id:"40",sn:40,name:"Terminal Block Separator, Gray (Pack of 10)",company:"Automation Direct",partNumber:"KN-ST3GRY",min:2,stock:0,unitPrice:24,spareStock:0,mode:"production"},
+{id:"41",sn:41,name:"DINnector Grounding Terminal Block, 20-6 AWG, Green/Yellow (Pack of 50)",company:"Automation Direct",partNumber:"DN-G6",min:12,stock:0,unitPrice:464,spareStock:0,mode:"production"},
+{id:"42",sn:42,name:"Terminal Block End Cover, Orange (Pack of 10)",company:"Automation Direct",partNumber:"KN-ECDORG",min:10,stock:0,unitPrice:9,spareStock:0,mode:"production"},
+{id:"43",sn:43,name:"Terminal Block End Cover, Green (Pack of 10)",company:"Automation Direct",partNumber:"KN-ECDGRN",min:10,stock:0,unitPrice:9,spareStock:0,mode:"production"},
+{id:"44",sn:44,name:"DINnector Screw-Down End Bracket, 9mm - Stopper Grey (Pack of 50)",company:"Automation Direct",partNumber:"DN-EB35",min:21,stock:0,unitPrice:98,spareStock:0,mode:"production"},
+{id:"45",sn:45,name:"DINnector Screw-Down End Bracket, 6mm - Stopper Black (Optional, Pack of 50)",company:"Automation Direct",partNumber:"DN-EB35-A",min:21,stock:0,unitPrice:74,spareStock:0,mode:"spare"},
+{id:"46",sn:46,name:"FUSE 5A (Pack of 5)",company:"Automation Direct",partNumber:"ABC5",min:3,stock:41,unitPrice:135.30,spareStock:0,mode:"production"},
+{id:"47",sn:47,name:"FUSE 1A (Pack of 5)",company:"Automation Direct",partNumber:"ABC1",min:1,stock:47,unitPrice:144,spareStock:0,mode:"production"},
+{id:"48",sn:48,name:"FUSE 10A (Pack of 5)",company:"Automation Direct",partNumber:"MDA10",min:4,stock:38,unitPrice:247,spareStock:0,mode:"production"},
+{id:"49",sn:49,name:"FUSE 8A (Pack of 5)",company:"Automation Direct",partNumber:"MDA8",min:1,stock:47,unitPrice:247,spareStock:0,mode:"production"},
+{id:"50",sn:50,name:"Gladiator MCB, 25A, 480Y/277VAC/125VDC, 2-pole, B-curve, 10kA",company:"Automation Direct",partNumber:"GMCBU-2B-25",min:1,stock:2,unitPrice:225,spareStock:0,mode:"production"},
+{id:"51",sn:51,name:'Konnect-It Marking Tag, 5x5mm, Single Character "S" (Pack of 250)',company:"Automation Direct",partNumber:"KN-L5-S-250",min:1,stock:0,unitPrice:16,spareStock:0,mode:"production"},
+{id:"52",sn:52,name:"Konnect-It Marking Tag, 5x5mm, Numbered 1-10 (Pack of 500)",company:"Automation Direct",partNumber:"KN-L5-1-10",min:15,stock:0,unitPrice:32,spareStock:0,mode:"production"}
 ];
 
 /* ========== STATE (Phase 5: centralized) ========== */
@@ -843,7 +854,7 @@ var STATE = {
 
 /* ========== HELPERS ========== */
 function $(id){return document.getElementById(id);}
-var spareImagesBtnLabel="\uD83D\uDDBC Fill Spare Images";
+var spareImagesBtnLabel="\uD83D\uDDBC Fill Part Images";
 /* Courtesy pause between web lookups to reduce rapid-fire requests to the image API */
 var imageLookupDelayMs=180;
 var imageLookupMaxResults=5;
@@ -858,6 +869,7 @@ function fmtDate(ts){
 }
 /* FIX: was "s < m  2" - restored missing * multiplication operator */
 function statusOf(p){var s=+p.stock||0,m=+p.min||1;if(s<=0)return"out";if(s<m)return"low";if(s<m*2)return"warn";return"ok";}
+function statusOfSpare(p){var s=+p.spareStock||0;if(s<=0)return"out";return"ok";}
 function statusLabel(s){return{out:"Out",low:"Low",warn:"Reorder",ok:"OK"}[s]||s;}
 function showToast(msg,type){var t=$("toast");t.textContent=msg;t.className="toast show "+(type||"");clearTimeout(showToast._t);showToast._t=setTimeout(function(){t.classList.remove("show");},2400);}
 function setSync(state,text){var dot=$("syncDot"),tx=$("syncText");if(dot)dot.className="dot "+(state||"");if(tx)tx.textContent=text;}
@@ -884,7 +896,7 @@ function initFirestoreSync(){
         batch.commit().then(function(){showToast("Initial BOM seeded","success");}).catch(function(e){showToast("Seed failed: "+e.message,"error");console.error("[Seed]",e);});
         return;
       }
-      STATE.parts=snap.docs.map(function(d){var data=d.data();return{id:data.id||d.id,sn:+data.sn||parseInt(data.id,10)||0,name:data.name||"(unnamed)",company:data.company||"-",partNumber:data.partNumber||"-",min:+data.min||1,stock:+data.stock||0,unitPrice:+data.unitPrice||0,mode:data.mode||"production",imageUrl:data.imageUrl||""};});
+      STATE.parts=snap.docs.map(function(d){var data=d.data();return{id:data.id||d.id,sn:+data.sn||parseInt(data.id,10)||0,name:data.name||"(unnamed)",company:data.company||"-",partNumber:data.partNumber||"-",min:+data.min||1,stock:+data.stock||0,spareStock:+data.spareStock||0,unitPrice:+data.unitPrice||0,mode:data.mode||"production",imageUrl:data.imageUrl||""};});
       $("lastUpdate").textContent="Updated "+new Date().toLocaleTimeString();
       render();
       checkAndNotifyLowStock();
@@ -896,16 +908,17 @@ function initFirestoreSync(){
 /* ========== RENDER ========== */
 function render(){
   var term=STATE.searchTerm.trim().toLowerCase();
+  /* All parts visible in all tabs — tabs control which stock field is shown */
+  var isSpare=STATE.mode==="spare";
+  var statusFn=isSpare?statusOfSpare:statusOf;
   var visible=STATE.parts.filter(function(p){
-    if(STATE.mode!=="all"&&p.mode!==STATE.mode)return false;
     if(term){var blob=(p.name+" "+p.company+" "+p.partNumber).toLowerCase();if(!blob.includes(term))return false;}
-    var st=statusOf(p);
+    var st=statusFn(p);
     if(STATE.statusFilter!=="all"&&st!==STATE.statusFilter&&!(STATE.statusFilter==="low"&&st==="warn"))return false;
     return true;
   });
-  var inMode=STATE.parts.filter(function(p){return STATE.mode==="all"||p.mode===STATE.mode;});
-  var cAll=inMode.length,cOut=0,cLow=0,cOk=0;
-  inMode.forEach(function(p){var s=statusOf(p);if(s==="out")cOut++;else if(s==="low"||s==="warn")cLow++;else cOk++;});
+  var cAll=STATE.parts.length,cOut=0,cLow=0,cOk=0;
+  STATE.parts.forEach(function(p){var s=statusFn(p);if(s==="out")cOut++;else if(s==="low"||s==="warn")cLow++;else cOk++;});
   $("cAll").textContent=cAll;$("cOut").textContent=cOut;$("cLow").textContent=cLow;$("cOk").textContent=cOk;
 
   var prod=STATE.parts.filter(function(p){return p.mode==="production";});
@@ -926,10 +939,13 @@ function render(){
   if(lowAll>0){$("lowAlertCount").textContent=lowAll;alertEl.style.display="inline-flex";}
   else{alertEl.style.display="none";}
 
+  /* Determine which stock field to display/edit based on active tab */
+  var stockFieldName=isSpare?"spareStock":"stock";
+
   var dir=STATE.sortDir==="asc"?1:-1;
   var sorted=visible.slice().sort(function(a,b){
     var av,bv;
-    if(STATE.sortKey==="status"){av=statusOf(a);bv=statusOf(b);}
+    if(STATE.sortKey==="status"){av=statusFn(a);bv=statusFn(b);}
     else if(STATE.sortKey==="lineValue"){av=a.stock*a.unitPrice;bv=b.stock*b.unitPrice;}
     else{av=a[STATE.sortKey];bv=b[STATE.sortKey];}
     if(typeof av==="string")return av.localeCompare(bv)*dir;
@@ -942,32 +958,29 @@ function render(){
   $("emptyState").style.display=sorted.length===0?"block":"none";
 
   sorted.forEach(function(p){
-    var s=statusOf(p);
+    var s=statusFn(p);
+    var displayStock=isSpare?(+p.spareStock||0):p.stock;
     var lineVal=p.stock*p.unitPrice;
-    var canMoveToProd=p.mode==="spare"&&(+p.stock||0)>0;
-    var moveTitle=canMoveToProd?"Move to Production":"Stock is 0 — cannot move to Production";
-    var moveDesktopBtn=p.mode==="spare"
-      ?'<button class="btn-row-move" data-id="'+p.id+'" title="'+moveTitle+'" aria-label="Move to Production"'+(canMoveToProd?'':' disabled')+'>&#x2197; Prod<\/button> '
-      :"";
-    var moveMobileBtn=p.mode==="spare"
-      ?'<button class="btn-row-move" data-id="'+p.id+'" title="'+moveTitle+'" aria-label="Move to Production"'+(canMoveToProd?'':' disabled')+'>&#x2197;<\/button>'
-      :"";
+    /* mode badge — shows BOM role of part */
+    var modeBadge=p.mode==="production"
+      ?'<span style="display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:rgba(249,115,22,.18);color:#fdba74;border:1px solid rgba(249,115,22,.3);margin-left:4px;vertical-align:middle;">BOM<\/span>'
+      :'<span style="display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:rgba(96,165,250,.18);color:#93c5fd;border:1px solid rgba(96,165,250,.3);margin-left:4px;vertical-align:middle;">SPARE<\/span>';
     var imgHtml=p.imageUrl
       ?'<img class="part-thumb" src="'+escapeHTML(p.imageUrl)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'" />'
       :'<span class="part-thumb-placeholder" aria-hidden="true">&#x1F4E6;</span>';
     var tr=document.createElement("tr");
     tr.className="row-"+s+" row-clickable";
     tr.dataset.partid=p.id;
-    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td style="width:44px;text-align:center;">'+imgHtml+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td><td class="actions">'+moveDesktopBtn+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button> <button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/td>';
+    tr.innerHTML='<td class="sn">'+p.sn+'<\/td><td style="width:44px;text-align:center;">'+imgHtml+'<\/td><td class="desc"><div class="name">'+escapeHTML(p.name)+modeBadge+'<\/div><\/td><td>'+escapeHTML(p.company)+'<\/td><td class="pn">'+escapeHTML(p.partNumber)+'<\/td><td class="num">'+p.min+'<\/td><td class="num"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'" data-field="'+stockFieldName+'">-<\/button><input type="number" min="0" value="'+displayStock+'" data-id="'+p.id+'" data-field="'+stockFieldName+'" ><button data-act="inc" data-id="'+p.id+'" data-field="'+stockFieldName+'">+<\/button><\/div><\/td><td><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/td><td class="price">'+fmtMoney(p.unitPrice)+'<\/td><td class="price">'+fmtMoney(lineVal)+'<\/td><td class="actions"><button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button> <button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/td>';
     tbody.appendChild(tr);
 
     var card=document.createElement("div");card.className="mobile-card row-clickable";card.dataset.partid=p.id;
-    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'">-<\/button><input type="number" min="0" value="'+p.stock+'" data-id="'+p.id+'" ><button data-act="inc" data-id="'+p.id+'">+<\/button><\/div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div>'+moveMobileBtn+'<button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button><button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/div><\/div>';
+    card.innerHTML='<div class="row"><div class="name">#'+p.sn+' - '+escapeHTML(p.name)+'<\/div><span class="badge '+s+'">'+statusLabel(s)+'<\/span><\/div><div class="row"><div class="meta">'+escapeHTML(p.company)+'<\/div><div class="pn">'+escapeHTML(p.partNumber)+'<\/div><\/div><div class="row"><div class="meta">Req / SSC: <strong>'+p.min+'<\/strong><\/div><div class="meta">Unit: '+fmtMoney(p.unitPrice)+'<\/div><\/div><div class="footer"><div class="stock-ctrl"><button data-act="dec" data-id="'+p.id+'" data-field="'+stockFieldName+'">-<\/button><input type="number" min="0" value="'+displayStock+'" data-id="'+p.id+'" data-field="'+stockFieldName+'" ><button data-act="inc" data-id="'+p.id+'" data-field="'+stockFieldName+'">+<\/button><\/div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><div class="meta">Line: <strong>'+fmtMoney(lineVal)+'<\/strong><\/div><button class="btn-row-edit" data-id="'+p.id+'" title="Edit part" aria-label="Edit part">&#x270F;<\/button><button class="btn-row-delete" data-id="'+p.id+'" title="Delete part" aria-label="Delete part">&#x1F5D1;<\/button><\/div><\/div>';
   mlist.appendChild(card);
   });
 
-  document.querySelectorAll('.stock-ctrl button').forEach(function(btn){btn.addEventListener("click",function(){var id=btn.dataset.id,act=btn.dataset.act;var p=STATE.parts.find(function(x){return x.id===id;});if(!p)return;var next=act==="inc"?p.stock+1:Math.max(0,p.stock-1);promptStockChange(id,next);});});
-  document.querySelectorAll('.stock-ctrl input').forEach(function(inp){inp.addEventListener("change",function(){var id=inp.dataset.id;var v=Math.max(0,parseInt(inp.value,10)||0);promptStockChange(id,v);});});
+  document.querySelectorAll('.stock-ctrl button').forEach(function(btn){btn.addEventListener("click",function(){var id=btn.dataset.id,act=btn.dataset.act,field=btn.dataset.field||"stock";var p=STATE.parts.find(function(x){return x.id===id;});if(!p)return;var curStock=field==="spareStock"?(+p.spareStock||0):p.stock;var next=act==="inc"?curStock+1:Math.max(0,curStock-1);promptStockChange(id,next,field);});});
+  document.querySelectorAll('.stock-ctrl input').forEach(function(inp){inp.addEventListener("change",function(){var id=inp.dataset.id,field=inp.dataset.field||"stock";var v=Math.max(0,parseInt(inp.value,10)||0);promptStockChange(id,v,field);});});
 }
 
 /* ========== ACTIONS ========== */
@@ -1278,13 +1291,16 @@ function applyLinkedPOSelection(){
   if(!$("reasonNotes").value.trim())$("reasonNotes").value="Linked open PO: "+(po.poNumber||po.id);
 }
 
-function promptStockChange(id,newValue){
+function promptStockChange(id,newValue,stockField){
+  stockField=stockField||"stock";
   var p=STATE.parts.find(function(x){return x.id===id;});
   if(!p)return;
-  if(p.stock===newValue)return;
-  pendingStockChange={id:id,oldStock:p.stock,newStock:newValue,partName:p.name,partNumber:p.partNumber};
-  var delta=newValue-p.stock;
-  $("reasonPartInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong><br\/>Stock: <strong>'+p.stock+'<\/strong> → <strong>'+newValue+'<\/strong> ('+(delta>0?'+':'')+delta+')';
+  var oldStock=stockField==="spareStock"?(+p.spareStock||0):p.stock;
+  if(oldStock===newValue)return;
+  pendingStockChange={id:id,oldStock:oldStock,newStock:newValue,partName:p.name,partNumber:p.partNumber,stockField:stockField};
+  var delta=newValue-oldStock;
+  var stockLabel=stockField==="spareStock"?" (Spare)":" (Production)";
+  $("reasonPartInfo").innerHTML='<strong>'+escapeHTML(p.name)+'<\/strong>'+escapeHTML(stockLabel)+'<br\/>Stock: <strong>'+oldStock+'<\/strong> \u2192 <strong>'+newValue+'<\/strong> ('+(delta>0?'+':'')+delta+')';
   $("reasonSelect").value=delta>0?"Received shipment":"Used in build";
   $("reasonNotes").value="";
   $("reasonPO").value="";
@@ -1308,8 +1324,11 @@ function confirmStockChange(){
   pendingStockChange=null;
   STATE.openPOCache[sc.id]=[];
   $("reasonModalBg").classList.remove("show");
-  db.collection("parts").doc(sc.id).update({stock:sc.newStock})
-    .then(function(){logAudit(sc.id,sc.partName,sc.partNumber,sc.oldStock,sc.newStock,reason,notes,poNumber,jobNumber);showToast("Stock updated","success");})
+  var updateObj={};
+  updateObj[sc.stockField||"stock"]=sc.newStock;
+  var auditNotes=(sc.stockField==="spareStock"?"[Spare stock] ":"")+notes;
+  db.collection("parts").doc(sc.id).update(updateObj)
+    .then(function(){logAudit(sc.id,sc.partName,sc.partNumber,sc.oldStock,sc.newStock,reason,auditNotes,poNumber,jobNumber);showToast("Stock updated","success");})
     .catch(function(e){showToast("Update failed: "+e.message,"error");});
 }
 
@@ -1364,6 +1383,9 @@ function openEditModal(id){
   $("editPrice").value=p.unitPrice;
   $("editMode").value=p.mode||"production";
   $("editImageUrl").value=p.imageUrl||"";
+  $("editImageFile").value="";
+  if(p.imageUrl){$("editImagePreview").src=p.imageUrl;$("editImagePreview").style.display="block";}
+  else{$("editImagePreview").src="";$("editImagePreview").style.display="none";}
   $("editModalBg").classList.add("show");
   $("editName").focus();
 }
@@ -1377,7 +1399,8 @@ function saveEditPart(){
   if(!existing){showToast("Part not found","error");return;}
   if(!name){showToast("Description is required","error");return;}
   if(!min||min<1){showToast("Qty must be >= 1","error");return;}
-  if(existing.mode==="spare"&&mode==="production"&&(+existing.stock||0)<=0){showToast("Cannot move spare with 0 stock to Production","error");$("editMode").focus();return;}
+  var newImageUrl=$("editImageUrl").value.trim();
+  if(!newImageUrl)newImageUrl="";
   db.collection("parts").doc(id).update({
     name:name,
     company:$("editCompany").value.trim()||"-",
@@ -1385,7 +1408,7 @@ function saveEditPart(){
     min:min,
     unitPrice:parseFloat($("editPrice").value)||0,
     mode:mode,
-    imageUrl:$("editImageUrl").value.trim()||""
+    imageUrl:newImageUrl
   }).then(function(){$("editModalBg").classList.remove("show");showToast("Part updated","success");})
     .catch(function(e){showToast("Update failed: "+e.message,"error");});
 }
@@ -1501,10 +1524,10 @@ function autofillSpareImages(){
   var btn=$("fetchSpareImagesBtn");
   if(btn.disabled)return;
   btn.disabled=true;
-  var targets=STATE.parts.filter(function(p){return p.mode==="spare"&&!p.imageUrl;});
-  if(!targets.length){btn.disabled=false;showToast("No spare parts without images found");return;}
+  var targets=STATE.parts.filter(function(p){return!p.imageUrl;});
+  if(!targets.length){btn.disabled=false;showToast("All parts already have images \u2705");return;}
   btn.textContent="Finding images... 0/"+targets.length;
-  showToast("Searching image links for "+targets.length+" spare parts...");
+  showToast("Searching images for "+targets.length+" part(s)...");
   var updated=0;
   var failed=0;
   var idx=0;
@@ -1515,7 +1538,9 @@ function autofillSpareImages(){
     if(idx>=targets.length){
       btn.disabled=false;
       btn.textContent=spareImagesBtnLabel;
-      showToast("Spare image lookup done. Success: "+updated+" · Failed: "+failed+" · Total: "+targets.length,(updated?"success":"info"));
+      var msg="Image search done \u2014 Found: "+updated+" | Not found: "+failed+" | Total: "+targets.length;
+      /* Show a persistent notification popup */
+      showImageResultPopup(updated, failed, targets.length);
       return;
     }
     var part=targets[idx++];
@@ -1528,6 +1553,25 @@ function autofillSpareImages(){
     }).then(function(){setProgress();setTimeout(step,imageLookupDelayMs);});
   }
   step();
+}
+
+function showImageResultPopup(found, notFound, total){
+  var existing=$("imageResultPopup");
+  if(existing)existing.remove();
+  var div=document.createElement("div");
+  div.id="imageResultPopup";
+  div.style.cssText="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px 28px;min-width:320px;box-shadow:0 8px 40px rgba(0,0,0,.6);text-align:center;";
+  div.innerHTML='<div style="font-size:28px;margin-bottom:10px;">'+(found>0?"\uD83D\uDDBC":"\uD83D\uDEAB")+'</div>'
+    +'<div style="font-weight:700;font-size:16px;color:#f1f5f9;margin-bottom:8px;">Image Search Complete</div>'
+    +'<div style="font-size:13px;color:#94a3b8;margin-bottom:16px;">'
+    +'<span style="color:#22c55e;font-weight:700;">'+found+'</span> found &nbsp;&nbsp; '
+    +'<span style="color:#f87171;font-weight:700;">'+notFound+'</span> not found &nbsp;&nbsp; '
+    +'<span style="color:#cbd5e1;">'+total+' total</span>'
+    +'</div>'
+    +(notFound>0?'<div style="font-size:11px;color:#64748b;margin-bottom:14px;">For parts not found, use Edit \u2192 Upload from Device to add images manually.</div>':'')
+    +'<button id="imageResultClose" class="btn btn-primary" style="width:100%;">OK</button>';
+  document.body.appendChild(div);
+  $("imageResultClose").addEventListener("click",function(){div.remove();});
 }
 
 /* ========== EXPORT ========== */
@@ -1842,7 +1886,8 @@ function openPartDetailModal(partId){
     '<div><div class="field-label">Vendor</div><strong>'+escapeHTML(p.company||"-")+'</strong></div>'+
     '<div><div class="field-label">Mode</div><strong>'+escapeHTML(p.mode||"-")+'</strong></div>'+
     '<div><div class="field-label">Status</div><span class="badge '+st+'">'+statusLabel(st)+'</span></div>'+
-    '<div><div class="field-label">Stock</div><strong>'+p.stock+'</strong></div>'+
+    '<div><div class="field-label">Production Stock</div><strong>'+p.stock+'</strong></div>'+
+    '<div><div class="field-label">Spare Stock</div><strong>'+((+p.spareStock)||0)+'</strong></div>'+
     '<div><div class="field-label">Req / SSC</div><strong>'+p.min+'</strong></div>'+
     '<div><div class="field-label">Unit Price</div><strong>'+fmtMoney(p.unitPrice)+'</strong></div>'+
     '<div><div class="field-label">Line Value</div><strong>'+fmtMoney(lineVal)+'</strong></div>'+
@@ -1855,7 +1900,12 @@ function openPartDetailModal(partId){
 $("modeProd").addEventListener("click",function(){STATE.mode="production";setActiveMode();render();});
 $("modeSpare").addEventListener("click",function(){STATE.mode="spare";setActiveMode();render();});
 $("modeAll").addEventListener("click",function(){STATE.mode="all";setActiveMode();render();});
-function setActiveMode(){["modeProd","modeSpare","modeAll"].forEach(function(id){$(id).classList.remove("active");});$({production:"modeProd",spare:"modeSpare",all:"modeAll"}[STATE.mode]).classList.add("active");}
+function setActiveMode(){
+  ["modeProd","modeSpare","modeAll"].forEach(function(id){$(id).classList.remove("active");});
+  $({production:"modeProd",spare:"modeSpare",all:"modeAll"}[STATE.mode]).classList.add("active");
+  var hdr=$("thStock");
+  if(hdr)hdr.textContent=STATE.mode==="spare"?"Spare Stock":"Stock";
+}
 $("statusFilter").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;document.querySelectorAll("#statusFilter button").forEach(function(x){x.classList.remove("active");});b.classList.add("active");STATE.statusFilter=b.dataset.f;render();});
 $("searchInput").addEventListener("input",function(e){STATE.searchTerm=e.target.value;render();});
 document.querySelectorAll("thead th").forEach(function(th){th.addEventListener("click",function(){var k=th.dataset.sort;if(!k)return;if(STATE.sortKey===k)STATE.sortDir=STATE.sortDir==="asc"?"desc":"asc";else{STATE.sortKey=k;STATE.sortDir="asc";}render();});});
@@ -1878,7 +1928,7 @@ $("addSave").addEventListener("click",function(){
   if(initialStock>0&&!jobNumber){showToast("Job Number required when initial stock > 0","error");$("newJob").focus();return;}
   var ref=db.collection("parts").doc();
   var maxSn=STATE.parts.reduce(function(m,p){return Math.max(m,+p.sn||0);},0);
-  var doc={id:ref.id,sn:maxSn+1,name:name,company:$("newCompany").value.trim()||"-",partNumber:$("newPN").value.trim()||"-",min:min,stock:initialStock,unitPrice:parseFloat($("newPrice").value)||0,mode:$("newMode").value,imageUrl:$("newImageUrl").value.trim()||""};
+  var doc={id:ref.id,sn:maxSn+1,name:name,company:$("newCompany").value.trim()||"-",partNumber:$("newPN").value.trim()||"-",min:min,stock:initialStock,spareStock:0,unitPrice:parseFloat($("newPrice").value)||0,mode:$("newMode").value,imageUrl:$("newImageUrl").value.trim()||""};
   ref.set(doc).then(function(){
     $("addModalBg").classList.remove("show");
     showToast("Part added","success");
@@ -1952,6 +2002,27 @@ setSync("","Connecting...");
 $("editCancel").addEventListener("click",function(){$("editModalBg").classList.remove("show");});
 $("editModalBg").addEventListener("click",function(e){if(e.target.id==="editModalBg")$("editModalBg").classList.remove("show");});
 $("editSave").addEventListener("click",saveEditPart);
+$("editImageUploadBtn").addEventListener("click",function(){$("editImageFile").click();});
+$("editImageFile").addEventListener("change",function(){
+  var f=this.files[0];if(!f)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var canvas=document.createElement("canvas");
+      var scale=Math.min(400/img.width,400/img.height,1);
+      canvas.width=Math.round(img.width*scale);
+      canvas.height=Math.round(img.height*scale);
+      canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+      var dataUrl=canvas.toDataURL("image/jpeg",0.75);
+      $("editImageUrl").value=dataUrl;
+      $("editImagePreview").src=dataUrl;
+      $("editImagePreview").style.display="block";
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(f);
+});
 
 /* Part details */
 $("partDetailClose").addEventListener("click",function(){$("partDetailModalBg").classList.remove("show");});
@@ -1980,14 +2051,12 @@ $("auditClose").addEventListener("click",function(){$("auditModalBg").classList.
 $("auditModalBg").addEventListener("click",function(e){if(e.target.id==="auditModalBg")$("auditModalBg").classList.remove("show");});
 $("auditSearch").addEventListener("input",function(){loadAuditLog(this.value);});
 
-/* Inline edit/delete/move — event delegation on tbody and mobileList */
+/* Inline edit/delete — event delegation on tbody and mobileList */
 $("tbody").addEventListener("click",function(e){
   var editBtn=e.target.closest(".btn-row-edit");
   if(editBtn){openEditModal(editBtn.dataset.id);return;}
   var delBtn=e.target.closest(".btn-row-delete");
   if(delBtn){openDeleteModal(delBtn.dataset.id);return;}
-  var moveBtn=e.target.closest(".btn-row-move");
-  if(moveBtn){moveToProduction(moveBtn.dataset.id);return;}
   if(e.target.closest(".stock-ctrl")||e.target.closest(".actions"))return;
   var row=e.target.closest("tr[data-partid]");
   if(row)openPartDetailModal(row.dataset.partid);
@@ -1997,8 +2066,6 @@ $("mobileList").addEventListener("click",function(e){
   if(editBtn){openEditModal(editBtn.dataset.id);return;}
   var delBtn=e.target.closest(".btn-row-delete");
   if(delBtn){openDeleteModal(delBtn.dataset.id);return;}
-  var moveBtn=e.target.closest(".btn-row-move");
-  if(moveBtn){moveToProduction(moveBtn.dataset.id);return;}
   if(e.target.closest(".stock-ctrl"))return;
   var card=e.target.closest(".mobile-card[data-partid]");
   if(card)openPartDetailModal(card.dataset.partid);
@@ -2126,19 +2193,19 @@ function buildAnalytics(){
     /* — Chart 1: Stock Health donut — */
     var cOut=0,cLow=0,cWarn=0,cOk=0;
     p.forEach(function(x){var s=statusOf(x);if(s==="out")cOut++;else if(s==="low")cLow++;else if(s==="warn")cWarn++;else cOk++;});
-    STATE.charts["chartStatus"]=new Chart($("chartStatus"),{type:"doughnut",data:{labels:["Out","Low","Reorder","OK"],datasets:[{data:[cOut,cLow,cWarn,cOk],backgroundColor:["#ef4444","#f97316","#eab308","#22c55e"],borderWidth:0}]},options:{plugins:{legend:{labels:{color:"#94a3b8",font:{size:11}}}},cutout:"60%",maintainAspectRatio:false}});
+    STATE.charts["chartStatus"]=new Chart($("chartStatus"),{type:"doughnut",data:{labels:["Out","Low","Reorder","OK"],datasets:[{data:[cOut,cLow,cWarn,cOk],backgroundColor:["#ef4444","#f97316","#eab308","#22c55e"],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:"#94a3b8",font:{size:11}}}},cutout:"60%"}});
 
     /* — Chart 2: Highest shortage parts — */
     var shortage=prodParts.map(function(x){return{name:x.name,missing:Math.max(0,(+x.min||1)-(+x.stock||0))};}).filter(function(x){return x.missing>0;}).sort(function(a,b){return b.missing-a.missing;}).slice(0,10);
-    STATE.charts["chartValue"]=new Chart($("chartValue"),{type:"bar",data:{labels:shortage.map(function(x){return x.name.length>22?x.name.slice(0,22)+"\u2026":x.name;}),datasets:[{data:shortage.map(function(x){return x.missing;}),backgroundColor:"rgba(239,68,68,.75)",borderRadius:4}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b"},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}},maintainAspectRatio:false}});
+    STATE.charts["chartValue"]=new Chart($("chartValue"),{type:"bar",data:{labels:shortage.map(function(x){return x.name.length>22?x.name.slice(0,22)+"\u2026":x.name;}),datasets:[{data:shortage.map(function(x){return x.missing;}),backgroundColor:"rgba(239,68,68,.75)",borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b"},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}}}});
 
     /* — Chart 3: Vendor concentration by value — */
     var vendorArr=Object.keys(vendorValMap).map(function(k){return{name:k,val:+vendorValMap[k].toFixed(2)};}).sort(function(a,b){return b.val-a.val;}).slice(0,10);
-    STATE.charts["chartVendor"]=new Chart($("chartVendor"),{type:"bar",data:{labels:vendorArr.map(function(x){return x.name.length>18?x.name.slice(0,18)+"\u2026":x.name;}),datasets:[{data:vendorArr.map(function(x){return x.val;}),backgroundColor:"rgba(96,165,250,.75)",borderRadius:4}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b",callback:function(v){return"$"+v.toLocaleString();}},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}},maintainAspectRatio:false}});
+    STATE.charts["chartVendor"]=new Chart($("chartVendor"),{type:"bar",data:{labels:vendorArr.map(function(x){return x.name.length>18?x.name.slice(0,18)+"\u2026":x.name;}),datasets:[{data:vendorArr.map(function(x){return x.val;}),backgroundColor:"rgba(96,165,250,.75)",borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#64748b",callback:function(v){return"$"+v.toLocaleString();}},grid:{color:"#1f2937"}},y:{ticks:{color:"#94a3b8",font:{size:10}},grid:{display:false}}}}});
 
     /* — Chart 4: Recent movement (7d) — */
     var dayKeys=Object.keys(dayMap).sort();
-    STATE.charts["chartCoverage"]=new Chart($("chartCoverage"),{type:"line",data:{labels:dayKeys.map(function(k){return k.slice(5);}),datasets:[{label:"Received",data:dayKeys.map(function(k){return dayMap[k].recv;}),borderColor:"rgba(34,197,94,1)",backgroundColor:"rgba(34,197,94,.2)",tension:.25,fill:true},{label:"Consumed",data:dayKeys.map(function(k){return dayMap[k].use;}),borderColor:"rgba(249,115,22,1)",backgroundColor:"rgba(249,115,22,.2)",tension:.25,fill:true}]},options:{plugins:{legend:{labels:{color:"#94a3b8"}}},scales:{x:{ticks:{color:"#94a3b8"},grid:{color:"#1f2937"}},y:{ticks:{color:"#64748b"},grid:{color:"#1f2937"}}},maintainAspectRatio:false}});
+    STATE.charts["chartCoverage"]=new Chart($("chartCoverage"),{type:"line",data:{labels:dayKeys.map(function(k){return k.slice(5);}),datasets:[{label:"Received",data:dayKeys.map(function(k){return dayMap[k].recv;}),borderColor:"rgba(34,197,94,1)",backgroundColor:"rgba(34,197,94,.2)",tension:.25,fill:true},{label:"Consumed",data:dayKeys.map(function(k){return dayMap[k].use;}),borderColor:"rgba(249,115,22,1)",backgroundColor:"rgba(249,115,22,.2)",tension:.25,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:"#94a3b8"}}},scales:{x:{ticks:{color:"#94a3b8"},grid:{color:"#1f2937"}},y:{ticks:{color:"#64748b"},grid:{color:"#1f2937"}}}}});
   }).catch(function(err){
     console.warn("[Analytics]",err&&err.message?err.message:err);
     $("anKpis").innerHTML=
@@ -2376,10 +2443,25 @@ function printQRLabels(){
   var selectedParts=getSelectedQRParts();
   if(!selectedParts.length){showToast("Select at least one part","error");return;}
   generateQRLabelItems(selectedParts).then(function(items){
-    var opened=openPrintableQRWindow(items);
-    if(opened){showToast("Print window opened","success");return;}
-    showToast("Pop-up blocked. Downloading PDF fallback…","error");
-    downloadQRLabelsPDF(items);
+    /* Populate in-page print area — avoids popup blocker entirely */
+    var printArea=$("qrPrintArea");
+    printArea.innerHTML='<div class="label-grid">'
+      +items.map(function(item){
+        var p=item.part;
+        return'<div class="label-item">'
+          +'<img src="'+item.qrUrl+'" style="width:90px;height:90px;" alt="QR" />'
+          +'<div class="l-name">'+escapeHTML(p.name.length>40?p.name.slice(0,40)+"\u2026":p.name)+'</div>'
+          +'<div class="l-pn">'+escapeHTML(p.partNumber)+'</div>'
+          +'<div class="l-co">'+escapeHTML(p.company)+'</div>'
+          +'</div>';
+      }).join("")
+      +'</div>';
+    showToast("Opening print dialog…");
+    setTimeout(function(){
+      window.print();
+      /* Clear print area after print dialog closes */
+      setTimeout(function(){printArea.innerHTML="";},1500);
+    },200);
   }).catch(function(e){showToast("QR generation failed: "+e.message,"error");});
 }
 
