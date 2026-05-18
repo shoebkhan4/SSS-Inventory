@@ -691,6 +691,9 @@ td.actions { white-space: nowrap; }
 <!-- QR in-page print area — populated dynamically, shown only via @media print -->
 <div id="qrPrintArea" style="display:none;"></div>
 
+<script src="assets/js/utils.js"></script>
+<script src="assets/js/stock-flow.js"></script>
+<script src="assets/js/po-flow.js"></script>
 <script>
 /* ========== FIREBASE CONFIG ========== */
 const firebaseConfig = {
@@ -855,7 +858,6 @@ var STATE = {
 };
 
 /* ========== HELPERS ========== */
-function $(id){return document.getElementById(id);}
 var spareImagesBtnLabel="\uD83D\uDDBC Fill Part Images";
 /* Courtesy pause between web lookups to reduce rapid-fire requests to the image API */
 var imageLookupDelayMs=180;
@@ -863,35 +865,12 @@ var imageLookupMaxResults=5;
 var imageLookupThumbWidth=360;
 var maxVendorNameLength=120;
 var maxVendorLeadDays=730;
-function fmtMoney(n){if(!isFinite(n))return"$0.00";return"$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
-function fmtDate(ts){
-  if(!ts)return"--";
-  var d=ts.toDate?ts.toDate():new Date(ts);
-  return d.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
-}
-/* FIX: was "s < m  2" - restored missing * multiplication operator */
-function statusOf(p){var s=+p.stock||0,m=+p.min||1;if(s<=0)return"out";if(s<m)return"low";if(s<m*2)return"warn";return"ok";}
-function statusOfSpare(p){var s=+p.spareStock||0,m=+p.min||1;if(s<=0)return"out";if(s<m)return"low";if(s<m*2)return"warn";return"ok";}
-function getStockLabelForField(stockField){return stockField==="spareStock"?"Spare Stock":"Production Stock";}
-function getActiveStockField(p,viewMode){
-  if(viewMode==="spare")return"spareStock";
-  if(viewMode==="production")return"stock";
-  return(p.mode==="spare")?"spareStock":"stock";
-}
-function getActiveStockValue(p,viewMode){
-  var field=getActiveStockField(p,viewMode);
-  return field==="spareStock"?(+p.spareStock||0):(+p.stock||0);
-}
-function getActiveStockLabel(p,viewMode){return getStockLabelForField(getActiveStockField(p,viewMode));}
-function getStatusForMode(p,viewMode){return getActiveStockField(p,viewMode)==="spareStock"?statusOfSpare(p):statusOf(p);}
 function stockTransitionHtml(partName,stockField,oldStock,newStock){
   var delta=newStock-oldStock;
   return'<strong>'+escapeHTML(partName)+'</strong><br/>'+escapeHTML(getStockLabelForField(stockField))+': <strong>'+oldStock+'</strong> → <strong>'+newStock+'</strong> ('+(delta>0?'+':'')+delta+')';
 }
-function statusLabel(s){return{out:"Out",low:"Low",warn:"Reorder",ok:"OK"}[s]||s;}
 function showToast(msg,type){var t=$("toast");t.textContent=msg;t.className="toast show "+(type||"");clearTimeout(showToast._t);showToast._t=setTimeout(function(){t.classList.remove("show");},2400);}
 function setSync(state,text){var dot=$("syncDot"),tx=$("syncText");if(dot)dot.className="dot "+(state||"");if(tx)tx.textContent=text;}
-function escapeHTML(s){return String(s).replace(/[&<>"']/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]);});}
 
 /* Online/offline indicator */
 window.addEventListener("online",function(){$("offlineBar").classList.remove("show");});
@@ -981,7 +960,7 @@ function render(){
     var rowStockField=getActiveStockField(p,STATE.mode);
     var rowStockLabel=getActiveStockLabel(p,STATE.mode);
     var displayStock=getActiveStockValue(p,STATE.mode);
-    var lineVal=displayStock*p.unitPrice;
+    var lineVal=getLineValueForMode(p,STATE.mode);
     /* mode badge — shows BOM role of part */
     var modeBadge=p.mode==="production"
       ?'<span style="display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:rgba(249,115,22,.18);color:#fdba74;border:1px solid rgba(249,115,22,.3);margin-left:4px;vertical-align:middle;">BOM<\/span>'
@@ -1279,7 +1258,7 @@ function updateReasonLinkedPOOptions(partId){
       snap.forEach(function(doc){
         var d=doc.data()||{};
         var st=d.status||"pending";
-        if(st==="pending"||st==="ordered")linked.push(d);
+        if(isPOSelectable(d))linked.push(d);
       });
       linked.sort(function(a,b){
         var at=a.createdAt&&a.createdAt.toDate?a.createdAt.toDate().getTime():0;
@@ -1670,7 +1649,7 @@ function exportInventoryCSV(all){
   var rows=[header].concat(data.map(function(p){
     var status=getStatusForMode(p,STATE.mode);
     var displayedStock=getActiveStockValue(p,STATE.mode);
-    return[p.sn,p.name,p.company,p.partNumber,p.min,+p.stock||0,+p.spareStock||0,displayedStock,statusLabel(status),p.unitPrice.toFixed(2),(displayedStock*p.unitPrice).toFixed(2),p.mode,p.imageUrl||""];
+    return[p.sn,p.name,p.company,p.partNumber,p.min,+p.stock||0,+p.spareStock||0,displayedStock,statusLabel(status),p.unitPrice.toFixed(2),getLineValueForMode(p,STATE.mode).toFixed(2),p.mode,p.imageUrl||""];
   }));
   downloadCSV(all?"inventory_full.csv":"inventory_filtered.csv",rows);
   showToast("Inventory exported ("+data.length+" parts)","success");
@@ -1717,8 +1696,9 @@ function openReorderModal(){
 function loadReorderSuggestions(){
   var container=$("reorderList");
   var orderMap={out:0,low:1,warn:2};
-  function statusFor(p){return p.mode==="spare"?statusOfSpare(p):statusOf(p);}
-  function stockFor(p){return p.mode==="spare"?(+p.spareStock||0):(+p.stock||0);}
+  function statusFor(p){return getStatusForMode(p,"all");}
+  function stockFor(p){return getActiveStockValue(p,"all");}
+  function stockLabelFor(p){return getActiveStockLabel(p,"all");}
   var lowParts=STATE.parts.filter(function(p){var s=statusFor(p);return s==="out"||s==="low"||s==="warn";})
     .slice().sort(function(a,b){return(orderMap[statusFor(a)]||3)-(orderMap[statusFor(b)]||3);});
   if(!lowParts.length){
@@ -1734,7 +1714,7 @@ function loadReorderSuggestions(){
     html+='<div class="reorder-item"><div style="flex:1;min-width:0;">'
       +'<div class="ri-name">'+escapeHTML(p.name)+'<\/div>'
       +'<div class="ri-meta">Part #: '+escapeHTML(p.partNumber)+' \u00b7 '+escapeHTML(p.company)+'<\/div>'
-      +'<div class="ri-meta">'+(p.mode==="spare"?"Spare Stock":"Production Stock")+': <strong>'+onHand+'<\/strong> \u00b7 Required/SSC: <strong>'+p.min+'<\/strong>'+(shortfall>0?' \u00b7 Shortfall: <strong style="color:#f87171;">'+shortfall+'<\/strong>':'')
+      +'<div class="ri-meta">'+escapeHTML(stockLabelFor(p))+': <strong>'+onHand+'<\/strong> \u00b7 Required/SSC: <strong>'+p.min+'<\/strong>'+(shortfall>0?' \u00b7 Shortfall: <strong style="color:#f87171;">'+shortfall+'<\/strong>':'')
       +' \u00b7 Suggested order qty: <strong style="color:#4ade80;">'+suggested+'<\/strong><\/div>'
       +'<\/div>'
       +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">'
@@ -1983,7 +1963,7 @@ function setActiveMode(){
   ["modeProd","modeSpare","modeAll"].forEach(function(id){$(id).classList.remove("active");});
   $({production:"modeProd",spare:"modeSpare",all:"modeAll"}[STATE.mode]).classList.add("active");
   var hdr=$("thStock");
-  if(hdr)hdr.textContent=STATE.mode==="spare"?"Spare Stock":(STATE.mode==="all"?"Production / Spare Stock":"Production Stock");
+  if(hdr)hdr.textContent=getStockHeaderLabel(STATE.mode);
 }
 function updateAddStockLabel(){
   $("newStockLabel").textContent="Initial "+($("newMode").value==="spare"?"Spare Stock":"Production Stock");
