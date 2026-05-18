@@ -694,7 +694,6 @@ td.actions { white-space: nowrap; }
 <script src="assets/js/utils.js"></script>
 <script src="assets/js/stock-flow.js"></script>
 <script src="assets/js/po-flow.js"></script>
-<script src="assets/js/render-helpers.js"></script>
 <script>
 /* ========== FIREBASE CONFIG ========== */
 const firebaseConfig = {
@@ -866,6 +865,10 @@ var imageLookupMaxResults=5;
 var imageLookupThumbWidth=360;
 var maxVendorNameLength=120;
 var maxVendorLeadDays=730;
+function stockTransitionHtml(partName,stockField,oldStock,newStock){
+  var delta=newStock-oldStock;
+  return'<strong>'+escapeHTML(partName)+'</strong><br/>'+escapeHTML(getStockLabelForField(stockField))+': <strong>'+oldStock+'</strong> → <strong>'+newStock+'</strong> ('+(delta>0?'+':'')+delta+')';
+}
 function showToast(msg,type){var t=$("toast");t.textContent=msg;t.className="toast show "+(type||"");clearTimeout(showToast._t);showToast._t=setTimeout(function(){t.classList.remove("show");},2400);}
 function setSync(state,text){var dot=$("syncDot"),tx=$("syncText");if(dot)dot.className="dot "+(state||"");if(tx)tx.textContent=text;}
 
@@ -1255,7 +1258,7 @@ function updateReasonLinkedPOOptions(partId){
       snap.forEach(function(doc){
         var d=doc.data()||{};
         var st=d.status||"pending";
-        if(isPOSelectableStatus(st))linked.push(d);
+        if(isPOSelectable(d))linked.push(d);
       });
       linked.sort(function(a,b){
         var at=a.createdAt&&a.createdAt.toDate?a.createdAt.toDate().getTime():0;
